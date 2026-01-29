@@ -155,7 +155,7 @@ function App() {
   return (
     <div className="app-container">
       <header>
-        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.1</span></h1>
+        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.2</span></h1>
         {patientName && (
           <div className="patient-badge" style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#64748b' }}>
             Patient: <strong style={{ color: '#fff' }}>{patientName}</strong>

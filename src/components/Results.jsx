@@ -136,7 +136,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
       <div ref={reportRef} style={{ padding: '2rem', background: '#0f172a', borderRadius: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #334155', paddingBottom: '1rem' }}>
-          <h2 style={{ margin: 0 }}>ANL Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.1</span></h2>
+          <h2 style={{ margin: 0 }}>ANL Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.2</span></h2>
           <div style={{ textAlign: 'right', fontSize: '0.9rem', color: '#94a3b8' }}>
             <div>Patient: <strong style={{ color: '#fff' }}>{patientName || "N/A"}</strong></div>
             <div>Date: {testDate || new Date().toLocaleDateString()}</div>
