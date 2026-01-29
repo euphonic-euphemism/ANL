@@ -1,0 +1,83 @@
+.test-phase-container {
+    max-width: 600px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    align-items: center;
+}
+
+.instruction {
+    font-size: 1.1em;
+    color: #adb5bd;
+    margin-bottom: 1rem;
+}
+
+.controls {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    width: 100%;
+}
+
+.display-value {
+    font-size: 3rem;
+    font-weight: 700;
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 1rem;
+    color: #3b82f6;
+    text-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+}
+
+.value-label {
+    display: block;
+    font-size: 0.8rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.button-group {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.control-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem 1rem;
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0.9em;
+}
+
+.control-btn .icon {
+    font-size: 1.5em;
+    margin-bottom: 0.5rem;
+}
+
+.control-btn:hover {
+    background: #2d3748;
+}
+
+.confirm-btn {
+    width: 100%;
+    padding: 1rem;
+    font-size: 1.2rem;
+    font-weight: 700;
+    background: var(--primary-gradient);
+    color: white;
+    border: none;
+    margin-top: 1rem;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+}
+
+.confirm-btn:hover {
+    box-shadow: 0 0 25px rgba(59, 130, 246, 0.6);
+    transform: translateY(-2px);
+}
