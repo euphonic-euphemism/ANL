@@ -1,7 +1,7 @@
 {
   "name": "accept-noise-level",
   "private": true,
-  "version": "1.0.5",
+  "version": "1.0.6",
   "author": "Audiology Team <admin@example.com>",
   "description": "Acceptable Noise Level (ANL) Test Application",
   "homepage": "https://github.com/euphonic-euphemism/ANL",
@@ -20,6 +20,7 @@
     "app:build": "npm run build && electron-builder"
   },
   "dependencies": {
+    "electron-squirrel-startup": "^1.0.1",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.0.0",
     "react": "^19.2.0",
