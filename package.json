@@ -1,7 +1,7 @@
 {
   "name": "accept-noise-level",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.0.5",
   "author": "Audiology Team <admin@example.com>",
   "description": "Acceptable Noise Level (ANL) Test Application",
   "homepage": "https://github.com/euphonic-euphemism/ANL",
@@ -10,7 +10,7 @@
     "url": "https://github.com/euphonic-euphemism/ANL.git"
   },
   "type": "module",
-  "main": "electron/main.js",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
