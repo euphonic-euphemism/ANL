@@ -97,7 +97,6 @@ function App() {
   // When entering MCL phase, ensure noise is muted and speech is audible
   useEffect(() => {
     if (phase === 'mcl' && isReady) {
-      play();
       setSpeechVolume((mcl !== null ? mcl : 50) - 85); // Start at comfortable level (50dB Display -> -35dB Audio)
       setNoiseVolume(-100); // Mute noise
     } else if (phase === 'bnl' && isReady) {
@@ -155,7 +154,7 @@ function App() {
   return (
     <div className="app-container">
       <header>
-        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.9</span></h1>
+        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.10</span></h1>
         {patientName && (
           <div className="patient-badge" style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#64748b' }}>
             Patient: <strong style={{ color: '#fff' }}>{patientName}</strong>
