@@ -157,7 +157,7 @@ function App() {
   return (
     <div className="app-container">
       <header>
-        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.19</span></h1>
+        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.21</span></h1>
         {patientName && (
           <div className="patient-badge" style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#64748b' }}>
             Patient: <strong style={{ color: '#fff' }}>{patientName}</strong>
@@ -362,24 +362,13 @@ function App() {
         {phase === 'auto_test' && (
           <AutoTrackingPhase
             speechLevel={autoSpeechLevel}
-            onComplete={() => {
-              // On complete, save results.
-              // For Auto mode, we just finished tracking.
-              // What implies "MCL"? Auto mode bypasses MCL phase.
-              // We probably treat MCL as 'N/A' or Fixed Level?
-              // Let's store the Fixed Level as MCL for record keeping.
-              // And BNL is the final level or average?
-              // The prompt didn't specify what the "BNL" result is.
-              // Usually it's the average of the last few reversals.
-              // Since I don't calculate that yet, let's just save the final level for now
-              // OR maybe I should just pass a "finish" handler that saves whatever.
-              // AutoTrackingPhase calls onComplete without args currently.
-              // I'll update Results to handle this or just transition to results.
-              // Let's assume the user just finished tracking and we go to results.
-              // WE NEED TO CAPTURE THE DATA.
-              // AutoTrackingPhase state is internal. I should pass an onComplete that accepts { mcl, bnl, history }?
-              // Current AutoTrackingPhase onComplete takes no args.
-              // I should update AutoTrackingPhase to pass back the final noise level.
+            onComplete={(data) => {
+              // Data: { mcl, bnl, reason }
+              if (activeTestId === 'A') {
+                setResultsA(data);
+              } else {
+                setResultsB(data);
+              }
               setPhase('results');
             }}
             onBack={() => setPhase('intro')}
@@ -409,4 +398,46 @@ function App() {
   );
 }
 
-export default App;
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    this.setState({ error, errorInfo });
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '2rem', color: 'white', background: '#7f1d1d' }}>
+          <h1>Something went wrong.</h1>
+          <details style={{ whiteSpace: 'pre-wrap' }}>
+            {this.state.error && this.state.error.toString()}
+            <br />
+            {this.state.errorInfo && this.state.errorInfo.componentStack}
+          </details>
+          <button onClick={() => window.location.reload()} style={{ marginTop: '1rem', padding: '0.5rem', cursor: 'pointer' }}>
+            Reload App
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+export default function WrappedApp() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}

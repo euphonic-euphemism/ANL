@@ -57,13 +57,21 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
 
         <div className="score-display">
           <div className="score-item">
-            <span className="label">MCL</span>
+            <span className="label">Speech Level</span>
             <span className="value">{data.mcl} dB</span>
           </div>
           <div className="score-item">
             <span className="label">BNL</span>
             <span className="value">{data.bnl} dB</span>
           </div>
+          {data.avgExcursion !== undefined && (
+            <div className="score-item">
+              <span className="label">Excursion</span>
+              <span className="value">{data.avgExcursion} dB</span>
+              {data.avgExcursion < 4 && <span style={{ fontSize: '0.7rem', color: '#4ade80' }}>High Reliability</span>}
+              {data.avgExcursion > 5 && <span style={{ fontSize: '0.7rem', color: '#f87171' }}>Low Reliability</span>}
+            </div>
+          )}
         </div>
 
         <div className="final-score" style={{ borderColor: color, padding: '1.5rem 1rem' }}>
@@ -114,7 +122,11 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
   // Comparison View
   const scoreA = calculateScore(resultsA);
   const scoreB = calculateScore(resultsB);
-  const improvement = scoreA.anl - scoreB.anl; // Positive means B is lower (better)
+
+  // Improvement based on BNL (Background Noise Level).
+  // Higher BNL means patient tolerates more noise, which is better.
+  // So Improvement = BNL_B - BNL_A
+  const improvement = resultsB.bnl - resultsA.bnl;
 
   const getInterpretation = (diff) => {
     const abs = Math.abs(diff);
@@ -124,7 +136,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
     const significance = abs >= 4 ? "Significant" : "Likely";
     const confidence = abs >= 4 ? "95% Confidence" : "80% Confidence";
 
-    // Green for improvement, Red for decline
+    // Green for improvement (higher BNL), Red for decline
     const color = diff > 0 ? "#4ade80" : "#f87171";
 
     return { text: `${significance} ${direction} (${confidence})`, color };
@@ -153,7 +165,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
         <div className="card summary-card" style={{ textAlign: 'center', maxWidth: '600px', margin: '0 auto', background: '#1e293b' }}>
           <h3>Outcome</h3>
           <p style={{ fontSize: '1.2rem' }}>
-            Difference (Test A - Test B): <strong style={{ color: interpretation.color }}>{improvement} dB</strong>
+            Benefit in BNL (Test B - Test A): <strong style={{ color: interpretation.color }}>{improvement > 0 ? '+' : ''}{improvement} dB</strong>
           </p>
           <p style={{ fontSize: '1.1rem', fontWeight: 600, color: interpretation.color, marginTop: '-0.5rem' }}>
             {interpretation.text}

@@ -14,7 +14,7 @@ const AutoTrackingPhase = ({
     const [noiseLevel, setNoiseLevel] = useState(speechLevel - 10); // Start 10dB below speech
     const [history, setHistory] = useState([]); // Array of {t, noise}
     const [startTime, setStartTime] = useState(null);
-    const [reversals, setReversals] = useState(0);
+    const [reversalCount, setReversalCount] = useState(0); // Renamed from reversals
     const [isSpaceHeld, setIsSpaceHeld] = useState(false);
     const [isFinished, setIsFinished] = useState(false);
 
@@ -26,13 +26,37 @@ const AutoTrackingPhase = ({
     const stateRef = useRef({
         noiseLevel: speechLevel - 10,
         isSpaceHeld: false,
-        direction: 1, // 1 = up, -1 = down
-        reversals: 0,
-        rate: INITIAL_RATE,
+        isNoiseIncreasing: true, // Renamed from direction (derived boolean)
+        reversalCount: 0, // Renamed from reversals
+        dbPerSecond: INITIAL_RATE, // Renamed from rate
+        reversalLevels: [], // Capture levels at reversal points
         lastUpdate: 0,
         stats: { slope: 0, stdDev: 0, mean: 0 },
         isFinishing: false
     });
+
+    // Calculate Average Excursion Width
+    const calculateExcursionWidth = (levels) => {
+        if (levels.length < 4) return 0; // Need at least 3 diffs (so 4 points) to count anything after ignoring first 2
+
+        let sumDiffs = 0;
+        let count = 0;
+
+        // Iterate through reversal levels, calculating diffs
+        for (let i = 1; i < levels.length; i++) {
+            const diff = Math.abs(levels[i] - levels[i - 1]);
+
+            // Exclude the first 2 differences (indices 0 and 1 relative to the diff array)
+            // i=1 is Diff 1 (Level 1 - Level 0). i=2 is Diff 2. i=3 is Diff 3.
+            // We want to skip Diff 1 and Diff 2. So start counting from i=3.
+            if (i >= 3) {
+                sumDiffs += diff;
+                count++;
+            }
+        }
+
+        return count > 0 ? (sumDiffs / count).toFixed(1) : 0;
+    };
 
     // Helper to safely finish
     const finishTest = (finalHistory, reason) => {
@@ -44,12 +68,18 @@ const AutoTrackingPhase = ({
             finalBnl = stateRef.current.stats.mean;
         }
 
-        console.log(`[AutoTracking] Finishing: ${reason}. Final BNL: ${finalBnl}`);
+        const avgExcursion = calculateExcursionWidth(stateRef.current.reversalLevels);
+        console.log(`[AutoTracking] Finishing: ${reason}. Final BNL: ${finalBnl}. Avg Excursion: ${avgExcursion}`);
 
         setTimeout(() => {
             setIsPlaying(false);
             setIsFinished(true);
-            onComplete({ mcl: speechLevel, bnl: Math.round(finalBnl), reason });
+            onComplete({
+                mcl: speechLevel,
+                bnl: Math.round(finalBnl),
+                avgExcursion: parseFloat(avgExcursion),
+                reason
+            });
         }, 0);
     };
 
@@ -96,24 +126,28 @@ const AutoTrackingPhase = ({
                 if (dt >= 0.1) { // Process roughly every 100ms
                     stateRef.current.lastUpdate = now;
 
-                    // Logic
-                    const currentDirection = stateRef.current.isSpaceHeld ? -1 : 1;
+                    // Logic: If space is held, noise decreases (isNoiseIncreasing = false)
+                    const isNoiseIncreasing = !stateRef.current.isSpaceHeld;
 
-                    // Detect Reversal
-                    if (currentDirection !== stateRef.current.direction) {
-                        stateRef.current.reversals += 1;
-                        setReversals(stateRef.current.reversals);
+                    // Detect Reversal: If direction changes
+                    if (isNoiseIncreasing !== stateRef.current.isNoiseIncreasing) {
+                        stateRef.current.reversalCount += 1;
+                        stateRef.current.reversalLevels.push(stateRef.current.noiseLevel); // Capture Level
+                        setReversalCount(stateRef.current.reversalCount); // Update UI state
 
                         // Adapt Rate
-                        if (stateRef.current.reversals >= REVERSAL_THRESHOLD) {
-                            stateRef.current.rate = SLOW_RATE;
+                        if (stateRef.current.reversalCount >= REVERSAL_THRESHOLD) {
+                            stateRef.current.dbPerSecond = SLOW_RATE;
                         }
 
-                        stateRef.current.direction = currentDirection;
+                        stateRef.current.isNoiseIncreasing = isNoiseIncreasing;
                     }
 
                     // Update Level
-                    const change = currentDirection * stateRef.current.rate * dt;
+                    // Dictionary direction: true (+1), false (-1)
+                    const directionMultiplier = isNoiseIncreasing ? 1 : -1;
+                    const change = directionMultiplier * stateRef.current.dbPerSecond * dt;
+
                     let newNoise = stateRef.current.noiseLevel + change;
                     newNoise = Math.max(0, Math.min(100, newNoise)); // Clamp
 
@@ -190,15 +224,16 @@ const AutoTrackingPhase = ({
         stateRef.current = {
             noiseLevel: startLevel,
             isSpaceHeld: false,
-            direction: 1,
-            reversals: 0,
-            rate: INITIAL_RATE,
+            isNoiseIncreasing: true,
+            reversalCount: 0,
+            dbPerSecond: INITIAL_RATE,
+            reversalLevels: [], // Initialize array to prevent crash
             lastUpdate: Date.now(),
             stats: { slope: 0, stdDev: 0, mean: 0 },
             isFinishing: false
         };
         setNoiseLevel(startLevel);
-        setReversals(0);
+        setReversalCount(0);
         setHistory([{ t: 0, noise: startLevel }]);
         setStartTime(Date.now());
         setIsPlaying(true);
@@ -216,14 +251,16 @@ const AutoTrackingPhase = ({
         // SVG Config
         const width = 600;
         const height = 300;
-        const padding = 20;
+        const margin = { top: 20, right: 30, bottom: 50, left: 60 }; // Increased margins for labels
+        const graphWidth = width - margin.left - margin.right;
+        const graphHeight = height - margin.top - margin.bottom;
 
         const maxTime = Math.max(60, history[history.length - 1].t); // Min 60s width
         const minDb = 0;
         const maxDb = 100;
 
-        const xScale = (t) => padding + (t / maxTime) * (width - 2 * padding);
-        const yScale = (db) => height - padding - (db / maxDb) * (height - 2 * padding);
+        const xScale = (t) => margin.left + (t / maxTime) * graphWidth;
+        const yScale = (db) => margin.top + graphHeight - (db / maxDb) * graphHeight;
 
         // Speech Line
         const speechY = yScale(speechLevel);
@@ -233,35 +270,97 @@ const AutoTrackingPhase = ({
             return `${i === 0 ? 'M' : 'L'} ${xScale(pt.t)} ${yScale(pt.noise)}`;
         }).join(' ');
 
-        return (
-            <svg width="100%" height="300" viewBox={`0 0 ${width} ${height}`} className="graph">
-                {/* Background Grid */}
-                <rect x={padding} y={padding} width={width - 2 * padding} height={height - 2 * padding} fill="#1e293b" />
+        // X-Axis Ticks (every 15s or 30s depending on scale)
+        const xTickInterval = maxTime > 120 ? 30 : 15;
+        const xTicks = [];
+        for (let t = 0; t <= maxTime; t += xTickInterval) {
+            xTicks.push(t);
+        }
 
-                {/* Horizontal Grid Lines */}
+        return (
+            <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} className="graph" preserveAspectRatio="xMidYMid meet">
+                {/* Background Grid */}
+                <rect x={margin.left} y={margin.top} width={graphWidth} height={graphHeight} fill="#1e293b" />
+
+                {/* Horizontal Grid Lines & Y-Axis Labels */}
                 {[0, 25, 50, 75, 100].map(db => (
-                    <line
-                        key={db}
-                        x1={padding} y1={yScale(db)}
-                        x2={width - padding} y2={yScale(db)}
-                        stroke="#334155" strokeWidth="1"
-                    />
+                    <g key={db}>
+                        <line
+                            x1={margin.left} y1={yScale(db)}
+                            x2={width - margin.right} y2={yScale(db)}
+                            stroke="#334155" strokeWidth="1"
+                        />
+                        <text
+                            x={margin.left - 10}
+                            y={yScale(db)}
+                            fill="#94a3b8"
+                            fontSize="12"
+                            textAnchor="end"
+                            alignmentBaseline="middle"
+                        >
+                            {db}
+                        </text>
+                    </g>
+                ))}
+
+                {/* Vertical Grid Lines & X-Axis Labels */}
+                {xTicks.map(t => (
+                    <g key={t}>
+                        <line
+                            x1={xScale(t)} y1={margin.top}
+                            x2={xScale(t)} y2={height - margin.bottom}
+                            stroke="#334155" strokeWidth="1"
+                            strokeOpacity="0.5"
+                        />
+                        <text
+                            x={xScale(t)}
+                            y={height - margin.bottom + 15}
+                            fill="#94a3b8"
+                            fontSize="12"
+                            textAnchor="middle"
+                        >
+                            {t}
+                        </text>
+                    </g>
                 ))}
 
                 {/* Speech Line */}
                 <line
-                    x1={padding} y1={speechY}
-                    x2={width - padding} y2={speechY}
+                    x1={margin.left} y1={speechY}
+                    x2={width - margin.right} y2={speechY}
                     stroke="#22c55e" strokeWidth="2" strokeDasharray="5,5"
                 />
-                <text x={width - padding + 5} y={speechY} fill="#22c55e" fontSize="12" alignmentBaseline="middle">Speech ({speechLevel})</text>
+                <text x={width - margin.right + 5} y={speechY} fill="#22c55e" fontSize="12" alignmentBaseline="middle">Speech</text>
 
                 {/* Noise Line */}
                 <path d={pathD} stroke="#3b82f6" strokeWidth="2" fill="none" />
 
-                {/* Axes */}
-                <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#94a3b8" />
-                <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#94a3b8" />
+                {/* Axes Lines */}
+                <line x1={margin.left} y1={margin.top} x2={margin.left} y2={height - margin.bottom} stroke="#94a3b8" strokeWidth="2" />
+                <line x1={margin.left} y1={height - margin.bottom} x2={width - margin.right} y2={height - margin.bottom} stroke="#94a3b8" strokeWidth="2" />
+
+                {/* Axis Titles */}
+                <text
+                    x={width / 2}
+                    y={height - 10}
+                    fill="#cbd5e1"
+                    fontSize="14"
+                    fontWeight="bold"
+                    textAnchor="middle"
+                >
+                    Time (seconds)
+                </text>
+                <text
+                    x={15}
+                    y={height / 2}
+                    fill="#cbd5e1"
+                    fontSize="14"
+                    fontWeight="bold"
+                    textAnchor="middle"
+                    transform={`rotate(-90, 15, ${height / 2})`}
+                >
+                    Level (dB)
+                </text>
             </svg>
         );
     };
@@ -276,9 +375,9 @@ const AutoTrackingPhase = ({
                 <div className="status-badges">
                     <span className="badge">Speech: <strong>{speechLevel} dB</strong></span>
                     <span className="badge">Noise: <strong>{noiseLevel.toFixed(1)} dB</strong></span>
-                    <span className="badge">Reversals: <strong>{reversals}</strong></span>
-                    <span className="badge" style={{ opacity: reversals >= 6 ? 1 : 0.5 }}>
-                        Rate: <strong>{reversals >= 6 ? '0.5' : '1.0'} dB/s</strong>
+                    <span className="badge">Reversals: <strong>{reversalCount}</strong></span>
+                    <span className="badge" style={{ opacity: reversalCount >= 6 ? 1 : 0.5 }}>
+                        Rate: <strong>{reversalCount >= 6 ? '0.5' : '1.0'} dB/s</strong>
                     </span>
                 </div>
             </div>
