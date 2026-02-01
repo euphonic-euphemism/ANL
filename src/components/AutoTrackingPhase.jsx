@@ -20,16 +20,16 @@ const AutoTrackingPhase = ({
     const [isFinished, setIsFinished] = useState(false);
 
     // Refs for logic loop to avoid stale closures
-    const INITIAL_RATE = 1.0;
-    const SLOW_RATE = 0.5;
-    const REVERSAL_THRESHOLD = 6;
+    // Refs for logic loop to avoid stale closures
+    const REVERSAL_THRESHOLD = 6; // Keep for reference, but logic is now dynamic
 
     const stateRef = useRef({
         noiseLevel: speechLevel - 10,
         isSpaceHeld: false,
         isNoiseIncreasing: true, // Renamed from direction (derived boolean)
         reversalCount: 0, // Renamed from reversals
-        dbPerSecond: INITIAL_RATE, // Renamed from rate
+        reversalCount: 0, // Renamed from reversals
+        dbPerSecond: 2.0, // Initial fast rate
         reversalLevels: [], // Capture levels at reversal points
         lastReversalTime: 0, // Debounce: Timestamp of last valid reversal
         lastUpdate: 0,
@@ -221,6 +221,42 @@ const AutoTrackingPhase = ({
             play();
             setSpeechVolume(speechLevel - 95);
 
+            const getCurrentTrackingRate = (reversalCount) => {
+                // Warm Start Logic: Removed 2.0 dB/s sprint since we start at Speech-10
+                if (reversalCount < 4) return 1.0;   // Standard learning speed
+                return 0.5;                          // Precision phase
+            };
+
+            const checkStoppingCriteria = (history, t, reversalCount) => {
+                // Guardrail 1: Time (Minimum 60 seconds)
+                if (t < 60) return false;
+
+                // Guardrail 2: Data Density (Minimum 7 reversals)
+                if (reversalCount < 7) return false;
+
+                // Existing Check: Slope & Variance (Last 30 seconds)
+                const windowData = history.filter(pt => pt.t >= t - 30);
+                if (windowData.length <= 10) return false;
+
+                const n = windowData.length;
+                const sumX = windowData.reduce((acc, pt) => acc + pt.t, 0);
+                const sumY = windowData.reduce((acc, pt) => acc + pt.noise, 0);
+                const sumXY = windowData.reduce((acc, pt) => acc + (pt.t * pt.noise), 0);
+                const sumX2 = windowData.reduce((acc, pt) => acc + (pt.t * pt.t), 0);
+
+                const numerator = (n * sumXY) - (sumX * sumY);
+                const denominator = (n * sumX2) - (sumX * sumX);
+                const slope = denominator !== 0 ? numerator / denominator : 0;
+
+                const mean = sumY / n;
+                const variance = windowData.reduce((acc, pt) => acc + Math.pow(pt.noise - mean, 2), 0) / n;
+                const stdDev = Math.sqrt(variance);
+
+                stateRef.current.stats = { slope, stdDev, mean };
+
+                return Math.abs(slope) <= 0.05 && stdDev < 2.0;
+            };
+
             const loop = () => {
                 const now = Date.now();
                 const dt = (now - stateRef.current.lastUpdate) / 1000;
@@ -232,23 +268,34 @@ const AutoTrackingPhase = ({
 
                     if (isNoiseIncreasing !== stateRef.current.isNoiseIncreasing) {
                         const now = Date.now();
-                        if (now - stateRef.current.lastReversalTime > 500) {
+                        const TIME_SINCE_LAST_REVERSAL = now - stateRef.current.lastReversalTime;
+
+                        // DEBOUNCE: 1000ms (1 second) guardrail
+                        if (TIME_SINCE_LAST_REVERSAL > 1000) {
                             stateRef.current.reversalCount += 1;
                             stateRef.current.reversalLevels.push(stateRef.current.noiseLevel);
                             stateRef.current.lastReversalTime = now;
                             setReversalCount(stateRef.current.reversalCount);
 
                             if (stateRef.current.reversalCount >= REVERSAL_THRESHOLD) {
-                                stateRef.current.dbPerSecond = SLOW_RATE;
+                                // Rate is now dynamic calculated per frame below
                             }
+
+                            // ONLY update direction if we passed the debounce check
+                            stateRef.current.isNoiseIncreasing = isNoiseIncreasing;
                         } else {
-                            console.log("Reversal ignored (debounce)", now - stateRef.current.lastReversalTime);
+                            // Ignore the input change completely (Heavy controls)
+                            // console.log("Reversal ignored (too fast)", TIME_SINCE_LAST_REVERSAL);
                         }
-                        stateRef.current.isNoiseIncreasing = isNoiseIncreasing;
                     }
 
                     const directionMultiplier = isNoiseIncreasing ? 1 : -1;
-                    const change = directionMultiplier * stateRef.current.dbPerSecond * dt;
+
+                    // Dynamic Rate Calculation
+                    const currentRate = getCurrentTrackingRate(stateRef.current.reversalCount);
+                    stateRef.current.dbPerSecond = currentRate; // Update ref for display/debugging
+
+                    const change = directionMultiplier * currentRate * dt;
 
                     let newNoise = stateRef.current.noiseLevel + change;
                     newNoise = Math.max(0, Math.min(100, newNoise));
@@ -266,36 +313,17 @@ const AutoTrackingPhase = ({
                     setHistory(prev => {
                         const newHistory = [...prev, { t, noise: newNoise }];
 
-                        if (t >= 120) {
-                            finishTest(newHistory, "Timeout (2 min)");
+                        if (t >= 180) { // Extended max timeout to 3 min just in case
+                            finishTest(newHistory, "Timeout (3 min)");
                             return newHistory;
                         }
 
-                        if (t >= 30) {
-                            const windowData = newHistory.filter(pt => pt.t >= t - 30);
-                            if (windowData.length > 10) {
-                                const n = windowData.length;
-                                const sumX = windowData.reduce((acc, pt) => acc + pt.t, 0);
-                                const sumY = windowData.reduce((acc, pt) => acc + pt.noise, 0);
-                                const sumXY = windowData.reduce((acc, pt) => acc + (pt.t * pt.noise), 0);
-                                const sumX2 = windowData.reduce((acc, pt) => acc + (pt.t * pt.t), 0);
-
-                                const numerator = (n * sumXY) - (sumX * sumY);
-                                const denominator = (n * sumX2) - (sumX * sumX);
-                                const slope = denominator !== 0 ? numerator / denominator : 0;
-
-                                const mean = sumY / n;
-                                const variance = windowData.reduce((acc, pt) => acc + Math.pow(pt.noise - mean, 2), 0) / n;
-                                const stdDev = Math.sqrt(variance);
-
-                                stateRef.current.stats = { slope, stdDev, mean };
-
-                                if (Math.abs(slope) <= 0.05 && stdDev < 2.0) {
-                                    finishTest(newHistory, "Stable Criteria Met", mean);
-                                    return newHistory;
-                                }
-                            }
+                        // Check Stopping Criteria
+                        if (checkStoppingCriteria(newHistory, t, stateRef.current.reversalCount)) {
+                            finishTest(newHistory, "Stable Criteria Met");
+                            return newHistory;
                         }
+
                         return newHistory;
                     });
                 }
@@ -350,8 +378,9 @@ const AutoTrackingPhase = ({
                     <span className="badge">Speech: <strong>{speechLevel} dB</strong></span>
                     <span className="badge">Noise: <strong>{noiseLevel.toFixed(1)} dB</strong></span>
                     <span className="badge">Reversals: <strong>{reversalCount}</strong></span>
-                    <span className="badge" style={{ opacity: reversalCount >= 6 ? 1 : 0.5 }}>
-                        Rate: <strong>{reversalCount >= 6 ? '0.5' : '1.0'} dB/s</strong>
+                    <span className="badge">Reversals: <strong>{reversalCount}</strong></span>
+                    <span className="badge">
+                        Rate: <strong>{reversalCount < 4 ? '1.0' : '0.5'} dB/s</strong>
                     </span>
                     <span className="badge" style={{ background: '#334155', border: '1px solid #475569' }}>
                         eANL: <strong>{currentEANL !== null ? currentEANL : '--'} dB</strong>

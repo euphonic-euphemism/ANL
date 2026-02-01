@@ -17,7 +17,7 @@ function App() {
   const [resultsA, setResultsA] = useState(null); // { mcl, bnl }
   const [resultsB, setResultsB] = useState(null); // { mcl, bnl }
   const [activeTestId, setActiveTestId] = useState('A'); // 'A' or 'B'
-  const [testMode, setTestMode] = useState('manual'); // 'manual' or 'auto'
+  const [testMode, setTestMode] = useState('auto'); // 'manual' or 'auto'
   const [autoSpeechLevel, setAutoSpeechLevel] = useState(75); // Fixed at 75 dB for Auto Mode
 
   // Current Active Values

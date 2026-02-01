@@ -13,7 +13,53 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
     try {
       const canvas = await html2canvas(reportRef.current, {
         scale: 2, // High resolution
-        backgroundColor: '#1e293b' // Match theme
+        backgroundColor: '#ffffff', // White background
+        onclone: (clonedDoc) => {
+          const element = clonedDoc.body.firstChild;
+          if (element) {
+            // Root Background
+            element.style.background = '#ffffff';
+            element.style.color = '#000000';
+
+            // Fix colors
+            const allElements = element.querySelectorAll('*');
+            allElements.forEach(el => {
+              const style = getComputedStyle(el);
+              // Check inline styles primarily as that's what we use
+              if (el.style.color === 'rgb(255, 255, 255)' || el.style.color === '#fff' || el.style.color === 'white') {
+                el.style.color = '#000000';
+              }
+              if (el.style.color === 'rgb(148, 163, 184)' || el.style.color === '#94a3b8') {
+                el.style.color = '#333333';
+              }
+              if (el.style.borderColor === 'rgb(51, 65, 85)' || el.style.borderColor === '#334155' ||
+                el.style.borderColor === 'rgb(71, 85, 105)' || el.style.borderColor === '#475569') {
+                el.style.borderColor = '#000000';
+              }
+            });
+
+            // Specific Card Styling
+            const cards = element.querySelectorAll('.card, .result-card, .summary-card');
+            cards.forEach(card => {
+              card.style.background = '#ffffff';
+              card.style.border = '1px solid #000000';
+              card.style.color = '#000000';
+              card.style.boxShadow = 'none';
+            });
+
+            // Explicitly fix Strong tags in header
+            const strongTags = element.querySelectorAll('strong');
+            strongTags.forEach(strong => {
+              if (strong.style.color.includes('255') || strong.style.color === '#fff') {
+                strong.style.color = '#000000';
+              }
+            });
+
+            // Hide Graphs
+            const graphSections = element.querySelectorAll('.tracking-history-section');
+            graphSections.forEach(section => section.style.display = 'none');
+          }
+        }
       });
 
       const imgData = canvas.toDataURL('image/png');
@@ -121,7 +167,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
         </div>
 
         {resultsA?.history && (
-          <div style={{ marginTop: '2rem' }}>
+          <div className="tracking-history-section" style={{ marginTop: '2rem' }}>
             <h3 style={{ textAlign: 'center', marginBottom: '1rem' }}>Tracking History</h3>
             <div style={{ height: '250px', background: '#1e293b', borderRadius: '12px', padding: '1rem' }}>
               <TestGraph history={resultsA.history} speechLevel={resultsA.mcl} width={500} height={250} />
@@ -212,7 +258,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
 
         {/* Graphs - Side by Side if available */}
         {(resultsA?.history || resultsB?.history) && (
-          <div style={{ marginTop: '2rem' }}>
+          <div className="tracking-history-section" style={{ marginTop: '2rem' }}>
             <h3 style={{ textAlign: 'center', marginBottom: '1rem' }}>Tracking History</h3>
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
               {resultsA?.history && (

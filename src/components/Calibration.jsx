@@ -3,7 +3,7 @@ import { useAudioController } from '../hooks/useAudioController';
 
 const Calibration = ({ onComplete, onBack }) => {
     // Use the calibration file
-    const [calType, setCalType] = useState('standard'); // 'standard' | 'warble'
+    const [calType, setCalType] = useState('warble'); // 'standard' | 'warble'
     const speechUrl = calType === 'standard' ? 'audio/cal_pulse_L.flac' : 'audio/cal_warble_L.flac';
     const noiseUrl = calType === 'standard' ? 'audio/cal_pulse_R.flac' : 'audio/cal_warble_R.flac';
 
