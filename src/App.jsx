@@ -5,6 +5,8 @@ import TestPhase from './components/TestPhase';
 import Calibration from './components/Calibration';
 import Results from './components/Results';
 import AutoTrackingPhase from './components/AutoTrackingPhase';
+import TestTimer from './components/TestTimer';
+import SettingsModal from './components/SettingsModal';
 
 function App() {
   const [phase, setPhase] = useState('intro'); // intro, calibration, mcl, bnl, results, choice_calibration
@@ -19,6 +21,14 @@ function App() {
   const [activeTestId, setActiveTestId] = useState('A'); // 'A' or 'B'
   const [testMode, setTestMode] = useState('auto'); // 'manual' or 'auto'
   const [autoSpeechLevel, setAutoSpeechLevel] = useState(75); // Fixed at 75 dB for Auto Mode
+
+  // Clinic Settings
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [clinicSettings, setClinicSettings] = useState({
+    clinicName: '',
+    providerName: '',
+    licenseNumber: ''
+  });
 
   // Current Active Values
   const [mcl, setMcl] = useState(null);
@@ -174,19 +184,45 @@ function App() {
 
   return (
     <div className="app-container">
-      <header>
-        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.23</span></h1>
-        {patientName && (
-          <div className="patient-badge" style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#64748b' }}>
-            Patient: <strong style={{ color: '#fff' }}>{patientName}</strong>
-          </div>
-        )}
-        {phase !== 'intro' && (
-          <div className="test-badge" style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#94a3b8' }}>
-            Testing: <strong style={{ color: '#fff' }}>{currentLabel}</strong>
-          </div>
-        )}
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.27</span></h1>
+          {patientName && (
+            <div className="patient-badge" style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#64748b' }}>
+              Patient: <strong style={{ color: '#fff' }}>{patientName}</strong>
+            </div>
+          )}
+          {phase !== 'intro' && (
+            <div className="test-badge" style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#94a3b8' }}>
+              Testing: <strong style={{ color: '#fff' }}>{currentLabel}</strong>
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            title="Clinic Settings"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              padding: '0.5rem',
+              fontSize: '1.2rem'
+            }}
+          >
+            ⚙️
+          </button>
+          <TestTimer />
+        </div>
       </header>
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onSave={setClinicSettings}
+        settings={clinicSettings}
+      />
 
       <main>
         {phase === 'intro' && (
@@ -410,6 +446,7 @@ function App() {
             testDate={testDate}
             onSave={savePatientData}
             onRestartTest={restartTest}
+            clinicSettings={clinicSettings}
           />
         )}
       </main>

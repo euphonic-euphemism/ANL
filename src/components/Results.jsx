@@ -3,7 +3,9 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import TestGraph from './TestGraph';
 
-const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTestB, onRestart, patientName, testDate, onSave, onRestartTest }) => {
+import { calculateSignificance } from '../utils/statistics';
+
+const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTestB, onRestart, patientName, testDate, onSave, onRestartTest, clinicSettings }) => {
   const reportRef = useRef(null);
 
   // Export PDF
@@ -20,6 +22,41 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
             // Root Background
             element.style.background = '#ffffff';
             element.style.color = '#000000';
+
+            // Add Clinic Header if settings exist
+            if (clinicSettings && (clinicSettings.clinicName || clinicSettings.providerName)) {
+              const headerDiv = document.createElement('div');
+              headerDiv.style.textAlign = 'center';
+              headerDiv.style.marginBottom = '20px';
+              headerDiv.style.borderBottom = '1px solid #ccc';
+              headerDiv.style.paddingBottom = '10px';
+              headerDiv.style.width = '100%';
+
+              if (clinicSettings.clinicName) {
+                const h1 = document.createElement('h1');
+                h1.innerText = clinicSettings.clinicName;
+                h1.style.margin = '0 0 5px 0';
+                h1.style.fontSize = '24px';
+                h1.style.color = '#000000';
+                headerDiv.appendChild(h1);
+              }
+
+              const details = [];
+              if (clinicSettings.providerName) details.push(`Provider: ${clinicSettings.providerName}`);
+              if (clinicSettings.licenseNumber) details.push(`Lic: ${clinicSettings.licenseNumber}`);
+
+              if (details.length > 0) {
+                const p = document.createElement('p');
+                p.innerText = details.join(' | ');
+                p.style.margin = '0';
+                p.style.fontSize = '14px';
+                p.style.color = '#333';
+                headerDiv.appendChild(p);
+              }
+
+              // Prepend to the element
+              element.insertBefore(headerDiv, element.firstChild);
+            }
 
             // Fix colors
             const allElements = element.querySelectorAll('*');
@@ -228,7 +265,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
       <div ref={reportRef} style={{ padding: '2rem', background: '#0f172a', borderRadius: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #334155', paddingBottom: '1rem' }}>
-          <h2 style={{ margin: 0 }}>ANL Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.1.0</span></h2>
+          <h2 style={{ margin: 0 }}>ANL Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.27</span></h2>
           <div style={{ textAlign: 'right', fontSize: '0.9rem', color: '#94a3b8' }}>
             <div>Patient: <strong style={{ color: '#fff' }}>{patientName || "N/A"}</strong></div>
             <div>Date: {testDate || new Date().toLocaleDateString()}</div>
@@ -250,9 +287,40 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
           <p style={{ fontSize: '1.1rem', fontWeight: 600, color: interpretation.color, marginTop: '-0.5rem' }}>
             {interpretation.text}
           </p>
+
+          {/* Statistical Significance Display */}
+          {(() => {
+            const sig = calculateSignificance(resultsA, resultsB);
+            if (sig.diff !== undefined) {
+              return (
+                <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '8px', border: `1px solid ${sig.color}` }}>
+                  <strong style={{ color: sig.color, display: 'block', marginBottom: '0.25rem', fontSize: '1.1rem' }}>
+                    {sig.message}
+                  </strong>
+
+                  {sig.confidenceLevel > 0 ? (
+                    <span style={{ fontSize: '0.9rem', color: '#cbd5e1' }}>
+                      Difference: <strong>{sig.diff} dB</strong>
+                      <span style={{ margin: '0 0.5rem', opacity: 0.5 }}>|</span>
+                      {sig.confidenceLevel === 95 ? (
+                        <span>&gt; Critical Limit (95%): {sig.criticalDifference95} dB</span>
+                      ) : (
+                        <span>&gt; Critical Limit (80%): {sig.criticalDifference80} dB</span>
+                      )}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                      Diff: {sig.diff} dB &lt; Critical Limit (80%): {sig.criticalDifference80} dB
+                    </span>
+                  )}
+                </div>
+              );
+            }
+            return null;
+          })()}
+
           <p style={{ color: '#ccc', fontStyle: 'italic', fontSize: '0.9rem', marginTop: '1rem' }}>
             (Lower ANL scores indicate better acceptance of background noise)<br />
-            (Change ≥ 4 dB is significant at 95% CI; ≥ 3 dB at 80% CI)
           </p>
         </div>
 

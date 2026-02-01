@@ -124,6 +124,22 @@ const AutoTrackingPhase = ({
             }
         }
 
+        // Calculate Stats for Validity (Standard Error & CI)
+        let finalStats = { se: 0, ci95: 0, stdDev: 0 };
+        if (reversals.length >= 4) {
+            const validReversals = reversals.slice(3);
+            if (validReversals.length >= 4) { // Need at least 4 for valid stats
+                const n = validReversals.length;
+                const mean = validReversals.reduce((a, b) => a + b, 0) / n;
+                const variance = validReversals.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (n - 1);
+                const stdDev = Math.sqrt(variance);
+                const se = stdDev / Math.sqrt(n);
+                const ci95 = 1.96 * se;
+
+                finalStats = { se, ci95, stdDev };
+            }
+        }
+
         let reliability_status = "Unknown/Insufficient Data";
         let reliability_diff = null;
 
@@ -148,6 +164,8 @@ const AutoTrackingPhase = ({
             validity: {
                 aANL: aANL,
                 aBNL: aBNL,
+                se: parseFloat(finalStats.se.toFixed(2)),
+                ci95: parseFloat(finalStats.ci95.toFixed(2)),
                 reliability_status,
                 reliability_diff,
                 stabilization_status
@@ -206,11 +224,21 @@ const AutoTrackingPhase = ({
             }
         };
 
+        const handleBlur = () => {
+            // Safety: If window loses focus, release the key
+            if (stateRef.current.isSpaceHeld) {
+                setIsSpaceHeld(false);
+                stateRef.current.isSpaceHeld = false;
+            }
+        };
+
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
+        window.addEventListener('blur', handleBlur);
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
+            window.removeEventListener('blur', handleBlur);
         };
     }, []);
 
@@ -375,7 +403,7 @@ const AutoTrackingPhase = ({
             isSpaceHeld: false,
             isNoiseIncreasing: true,
             reversalCount: 0,
-            dbPerSecond: INITIAL_RATE,
+            dbPerSecond: 1.0, // Initial Rate for Warm Start
             reversalLevels: [],
             lastReversalTime: 0,
             lastUpdate: Date.now(),
