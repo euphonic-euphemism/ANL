@@ -16,6 +16,7 @@ function App() {
   const [resultsA, setResultsA] = useState(null); // { mcl, bnl }
   const [resultsB, setResultsB] = useState(null); // { mcl, bnl }
   const [activeTestId, setActiveTestId] = useState('A'); // 'A' or 'B'
+  const [testMode, setTestMode] = useState('manual'); // 'manual' or 'auto'
 
   // Current Active Values
   const [mcl, setMcl] = useState(null);
@@ -154,7 +155,7 @@ function App() {
   return (
     <div className="app-container">
       <header>
-        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.11</span></h1>
+        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.12</span></h1>
         {patientName && (
           <div className="patient-badge" style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#64748b' }}>
             Patient: <strong style={{ color: '#fff' }}>{patientName}</strong>
@@ -208,8 +209,19 @@ function App() {
                 value={labelB}
                 onChange={(e) => setLabelB(e.target.value)}
                 className="text-input"
-                style={{ width: '100%', padding: '0.8rem', borderRadius: '6px', border: '1px solid #475569', background: '#1e293b', color: 'white' }}
+                style={{ width: '100%', padding: '0.8rem', borderRadius: '6px', border: '1px solid #475569', background: '#1e293b', color: 'white', marginBottom: '1.5rem' }}
               />
+
+              <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8' }}>Mode</label>
+              <select
+                value={testMode}
+                onChange={(e) => setTestMode(e.target.value)}
+                className="text-input"
+                style={{ width: '100%', padding: '0.8rem', borderRadius: '6px', border: '1px solid #475569', background: '#1e293b', color: 'white' }}
+              >
+                <option value="manual">Manual (Standard)</option>
+                <option value="auto">Automatic (1 dB/sec)</option>
+              </select>
             </div>
 
             <div className="data-controls" style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
@@ -318,6 +330,7 @@ function App() {
             }}
             onConfirm={handleBnlConfirm}
             onBack={() => setPhase('mcl')}
+            isAuto={testMode === 'auto'}
             onPlay={() => {
               play();
               // Keep speech at MCL
