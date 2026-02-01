@@ -270,6 +270,9 @@ const AutoTrackingPhase = ({
         <div className="auto-tracking-container card">
             <div className="header">
                 <h2>Automatic BNL Test</h2>
+                <p className="instruction" style={{ color: '#cbd5e1', margin: '1rem 0', fontSize: '1.1rem', fontStyle: 'italic' }}>
+                    "Instruct listeners to maintain the noise at the highest level where they can still understand ≥90% of the words."
+                </p>
                 <div className="status-badges">
                     <span className="badge">Speech: <strong>{speechLevel} dB</strong></span>
                     <span className="badge">Noise: <strong>{noiseLevel.toFixed(1)} dB</strong></span>
