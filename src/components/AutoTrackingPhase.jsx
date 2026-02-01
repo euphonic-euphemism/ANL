@@ -234,27 +234,56 @@ const AutoTrackingPhase = ({
                 // Guardrail 2: Data Density (Minimum 7 reversals)
                 if (reversalCount < 7) return false;
 
-                // Existing Check: Slope & Variance (Last 30 seconds)
-                const windowData = history.filter(pt => pt.t >= t - 30);
-                if (windowData.length <= 10) return false;
+                // --- CI Calculation (New) ---
+                // 1. Get all captured reversal levels
+                const allReversals = stateRef.current.reversalLevels;
 
-                const n = windowData.length;
-                const sumX = windowData.reduce((acc, pt) => acc + pt.t, 0);
-                const sumY = windowData.reduce((acc, pt) => acc + pt.noise, 0);
-                const sumXY = windowData.reduce((acc, pt) => acc + (pt.t * pt.noise), 0);
-                const sumX2 = windowData.reduce((acc, pt) => acc + (pt.t * pt.t), 0);
+                // 2. Drop the first 3 (stabilization)
+                const validReversals = allReversals.slice(3);
 
-                const numerator = (n * sumXY) - (sumX * sumY);
-                const denominator = (n * sumX2) - (sumX * sumX);
-                const slope = denominator !== 0 ? numerator / denominator : 0;
+                // 3. Need at least 4 valid points for stats
+                if (validReversals.length < 4) return false;
 
-                const mean = sumY / n;
-                const variance = windowData.reduce((acc, pt) => acc + Math.pow(pt.noise - mean, 2), 0) / n;
+                // 4. Calculate Stats (Mean, StdDev, SE, CI)
+                const n = validReversals.length;
+                const mean = validReversals.reduce((a, b) => a + b, 0) / n;
+                const variance = validReversals.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (n - 1); // Sample Variance
                 const stdDev = Math.sqrt(variance);
+                const standardError = stdDev / Math.sqrt(n);
+                const ci95 = 1.96 * standardError; // Margin of Error
 
-                stateRef.current.stats = { slope, stdDev, mean };
+                // --- Existing Slope Logic (Still valuable for trend detection) ---
+                const windowData = history.filter(pt => pt.t >= t - 30);
+                let slope = 0;
+                let windowStdDev = 0;
 
-                return Math.abs(slope) <= 0.05 && stdDev < 2.0;
+                if (windowData.length > 10) {
+                    const nW = windowData.length;
+                    const sumX = windowData.reduce((acc, pt) => acc + pt.t, 0);
+                    const sumY = windowData.reduce((acc, pt) => acc + pt.noise, 0);
+                    const sumXY = windowData.reduce((acc, pt) => acc + (pt.t * pt.noise), 0);
+                    const sumX2 = windowData.reduce((acc, pt) => acc + (pt.t * pt.t), 0);
+
+                    const numerator = (nW * sumXY) - (sumX * sumY);
+                    const denominator = (nW * sumX2) - (sumX * sumX);
+                    slope = denominator !== 0 ? numerator / denominator : 0;
+
+                    const windowMean = sumY / nW;
+                    const windowVariance = windowData.reduce((acc, pt) => acc + Math.pow(pt.noise - windowMean, 2), 0) / nW;
+                    windowStdDev = Math.sqrt(windowVariance);
+                }
+
+                stateRef.current.stats = { slope, stdDev: windowStdDev, mean, ci95 };
+
+                // Smart Stop Condition:
+                // 1. Confidence Interval is tight (<= 2.5 dB)
+                // 2. Slope is flat (<= 0.05) - ensures we aren't drifting
+                if (ci95 <= 2.5 && Math.abs(slope) <= 0.05) {
+                    // console.log(`Smart Stop Triggered! CI: ${ci95.toFixed(2)}, Slope: ${slope.toFixed(3)}`);
+                    return true;
+                }
+
+                return false;
             };
 
             const loop = () => {
@@ -313,8 +342,8 @@ const AutoTrackingPhase = ({
                     setHistory(prev => {
                         const newHistory = [...prev, { t, noise: newNoise }];
 
-                        if (t >= 180) { // Extended max timeout to 3 min just in case
-                            finishTest(newHistory, "Timeout (3 min)");
+                        if (t >= 120) { // Timeout at 2 min
+                            finishTest(newHistory, "Timeout (2 min)");
                             return newHistory;
                         }
 

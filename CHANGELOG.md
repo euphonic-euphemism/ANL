@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.25] - 2026-02-01
+
+### Added
+- **Confidence Interval (CI) Stopping**: Implemented statistical stopping logic. Automatic tests now stop between 60s and 120s ONLY if the 95% CI is <= 2.5 dB.
+- **Timeout Revert**: Reverted maximum test duration to 120 seconds (2 minutes).
+
 ## [1.0.24] - 2026-02-01
 
 ### Added
