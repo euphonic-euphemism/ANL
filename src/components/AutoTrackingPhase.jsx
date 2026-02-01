@@ -11,7 +11,7 @@ const AutoTrackingPhase = ({
     setNoiseVolume
 }) => {
     const [isPlaying, setIsPlaying] = useState(false);
-    const [noiseLevel, setNoiseLevel] = useState(25); // Start low
+    const [noiseLevel, setNoiseLevel] = useState(speechLevel - 10); // Start 10dB below speech
     const [history, setHistory] = useState([]); // Array of {t, noise}
     const [startTime, setStartTime] = useState(null);
     const [reversals, setReversals] = useState(0);
@@ -19,20 +19,39 @@ const AutoTrackingPhase = ({
     const [isFinished, setIsFinished] = useState(false);
 
     // Refs for logic loop to avoid stale closures
-    const stateRef = useRef({
-        noiseLevel: 25,
-        isSpaceHeld: false,
-        direction: 1, // 1 = up, -1 = down
-        reversals: 0,
-        rate: 1.0, // dB per second
-        lastUpdate: 0
-    });
-
-    // Constants
-    const TICK_RATE = 100; // Update every 100ms
     const INITIAL_RATE = 1.0;
     const SLOW_RATE = 0.5;
     const REVERSAL_THRESHOLD = 6;
+
+    const stateRef = useRef({
+        noiseLevel: speechLevel - 10,
+        isSpaceHeld: false,
+        direction: 1, // 1 = up, -1 = down
+        reversals: 0,
+        rate: INITIAL_RATE,
+        lastUpdate: 0,
+        stats: { slope: 0, stdDev: 0, mean: 0 },
+        isFinishing: false
+    });
+
+    // Helper to safely finish
+    const finishTest = (finalHistory, reason) => {
+        if (stateRef.current.isFinishing) return;
+        stateRef.current.isFinishing = true;
+
+        let finalBnl = stateRef.current.noiseLevel;
+        if (reason === "Stable Criteria Met" && stateRef.current.stats) {
+            finalBnl = stateRef.current.stats.mean;
+        }
+
+        console.log(`[AutoTracking] Finishing: ${reason}. Final BNL: ${finalBnl}`);
+
+        setTimeout(() => {
+            setIsPlaying(false);
+            setIsFinished(true);
+            onComplete({ mcl: speechLevel, bnl: Math.round(finalBnl), reason });
+        }, 0);
+    };
 
     useEffect(() => {
         // Keyboard listeners
@@ -81,9 +100,6 @@ const AutoTrackingPhase = ({
                     const currentDirection = stateRef.current.isSpaceHeld ? -1 : 1;
 
                     // Detect Reversal
-                    // If direction changed since last tick? No, reversal is basically peak/valley.
-                    // A reversal happens when we switch from increasing to decreasing or vice versa.
-                    // We track the *previous* direction to detect change.
                     if (currentDirection !== stateRef.current.direction) {
                         stateRef.current.reversals += 1;
                         setReversals(stateRef.current.reversals);
@@ -98,10 +114,6 @@ const AutoTrackingPhase = ({
 
                     // Update Level
                     const change = currentDirection * stateRef.current.rate * dt;
-                    // Note: dt is small (~0.1), so change is ~0.1 or ~0.05
-                    // We actually want strictly 1dB/sec or 0.5dB/sec.
-                    // Ideally we simply add (rate * dt).
-
                     let newNoise = stateRef.current.noiseLevel + change;
                     newNoise = Math.max(0, Math.min(100, newNoise)); // Clamp
 
@@ -113,7 +125,52 @@ const AutoTrackingPhase = ({
 
                     // Update Graph Data
                     const t = (now - startTime) / 1000;
-                    setHistory(prev => [...prev, { t, noise: newNoise }]);
+                    setHistory(prev => {
+                        const newHistory = [...prev, { t, noise: newNoise }];
+
+                        // --- Stopping Criteria Logic ---
+
+                        // 1. Hard Timeout (120s)
+                        if (t >= 120) {
+                            finishTest(newHistory, "Timeout (2 min)");
+                            return newHistory;
+                        }
+
+                        // 2. Stability Check (After 30s)
+                        if (t >= 30) {
+                            // Get last 30s of data
+                            const windowData = newHistory.filter(pt => pt.t >= t - 30);
+
+                            if (windowData.length > 10) { // Ensure enough points
+                                // Calculate Statistics
+                                const n = windowData.length;
+                                const sumX = windowData.reduce((acc, pt) => acc + pt.t, 0);
+                                const sumY = windowData.reduce((acc, pt) => acc + pt.noise, 0);
+                                const sumXY = windowData.reduce((acc, pt) => acc + (pt.t * pt.noise), 0);
+                                const sumX2 = windowData.reduce((acc, pt) => acc + (pt.t * pt.t), 0);
+
+                                // Slope (m)
+                                const numerator = (n * sumXY) - (sumX * sumY);
+                                const denominator = (n * sumX2) - (sumX * sumX);
+                                const slope = denominator !== 0 ? numerator / denominator : 0;
+
+                                // Standard Deviation (SD)
+                                const mean = sumY / n;
+                                const variance = windowData.reduce((acc, pt) => acc + Math.pow(pt.noise - mean, 2), 0) / n;
+                                const stdDev = Math.sqrt(variance);
+
+                                stateRef.current.stats = { slope, stdDev, mean };
+
+                                // Criteria: Slope approx 0 (+/- 0.05) AND Variance/SD < 2
+                                if (Math.abs(slope) <= 0.05 && stdDev < 2.0) {
+                                    finishTest(newHistory, "Stable Criteria Met");
+                                    return newHistory;
+                                }
+                            }
+                        }
+
+                        return newHistory;
+                    });
                 }
 
                 animationFrame = requestAnimationFrame(loop);
@@ -129,26 +186,27 @@ const AutoTrackingPhase = ({
     }, [isPlaying, isFinished, speechLevel, play, stop, setSpeechVolume, setNoiseVolume, startTime]);
 
     const handleStart = () => {
+        const startLevel = speechLevel - 10;
         stateRef.current = {
-            noiseLevel: 25,
+            noiseLevel: startLevel,
             isSpaceHeld: false,
             direction: 1,
             reversals: 0,
             rate: INITIAL_RATE,
-            lastUpdate: Date.now()
+            lastUpdate: Date.now(),
+            stats: { slope: 0, stdDev: 0, mean: 0 },
+            isFinishing: false
         };
-        setNoiseLevel(25);
+        setNoiseLevel(startLevel);
         setReversals(0);
-        setHistory([{ t: 0, noise: 25 }]);
+        setHistory([{ t: 0, noise: startLevel }]);
         setStartTime(Date.now());
         setIsPlaying(true);
         setIsFinished(false);
     };
 
     const handleFinish = () => {
-        setIsPlaying(false);
-        setIsFinished(true);
-        onComplete(); // Could pass results up if needed
+        finishTest(history, "Manual Stop");
     };
 
     // Graph Rendering Helper
@@ -232,7 +290,7 @@ const AutoTrackingPhase = ({
                         {isSpaceHeld ? 'Decreasing Noise...' : 'Hold SPACEBAR to Decrease Noise'}
                     </div>
                     <button className="confirm-btn finish-btn" onClick={handleFinish}>
-                        Finish Test
+                        Stop & Finish
                     </button>
                 </div>
             ) : (
