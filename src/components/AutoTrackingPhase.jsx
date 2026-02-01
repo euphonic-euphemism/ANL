@@ -87,7 +87,7 @@ const AutoTrackingPhase = ({
         if (isPlaying && !isFinished) {
             // Start audio
             play();
-            setSpeechVolume(speechLevel - 85);
+            setSpeechVolume(speechLevel - 95);
 
             const loop = () => {
                 const now = Date.now();
@@ -121,7 +121,7 @@ const AutoTrackingPhase = ({
                     setNoiseLevel(newNoise);
 
                     // Update Audio
-                    setNoiseVolume(newNoise - 85);
+                    setNoiseVolume(newNoise - 95);
 
                     // Update Graph Data
                     const t = (now - startTime) / 1000;

@@ -100,13 +100,13 @@ function App() {
   // When entering MCL phase, ensure noise is muted and speech is audible
   useEffect(() => {
     if (phase === 'mcl' && isReady) {
-      setSpeechVolume((mcl !== null ? mcl : 50) - 85); // Start at comfortable level (50dB Display -> -35dB Audio)
+      setSpeechVolume((mcl !== null ? mcl : 50) - 95); // Start at comfortable level (50dB Display -> -45dB Audio)
       setNoiseVolume(-100); // Mute noise
     } else if (phase === 'bnl' && isReady) {
       // Keep speech at MCL
-      setSpeechVolume(mcl - 85);
-      // Start noise low (e.g. 25dB Display -> -60dB Audio)
-      setNoiseVolume(25 - 85);
+      setSpeechVolume(mcl - 95);
+      // Start noise low (e.g. 25dB Display -> -70dB Audio)
+      setNoiseVolume(25 - 95);
     } else if (phase === 'results') {
       stop();
     }
@@ -157,7 +157,7 @@ function App() {
   return (
     <div className="app-container">
       <header>
-        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.18</span></h1>
+        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.19</span></h1>
         {patientName && (
           <div className="patient-badge" style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#64748b' }}>
             Patient: <strong style={{ color: '#fff' }}>{patientName}</strong>
@@ -310,9 +310,9 @@ function App() {
                 maxVal={100}
                 onChange={(val) => {
                   setMcl(val);
-                  // Map Display dB (25-100) to WebAudio dB (-60 to +15)
-                  // Offset is -85dB. 100 - 85 = +15dB (Max). 25 - 85 = -60dB (Min).
-                  setSpeechVolume(val - 85);
+                  // Map Display dB (25-100) to WebAudio dB (-70 to +5)
+                  // Offset is -95dB. 100 - 95 = +5dB (Max). 25 - 95 = -70dB (Min).
+                  setSpeechVolume(val - 95);
                 }}
                 onConfirm={handleMclConfirm}
                 onBack={() => {
@@ -323,7 +323,7 @@ function App() {
                   play();
                   // RE-APPLY Volumes because play() creates new GainNodes with 1.0 (Loud) gain.
                   // This ensures we resume at the user's selected comfort level.
-                  const speechLevel = (mcl !== null ? mcl : 50) - 85;
+                  const speechLevel = (mcl !== null ? mcl : 50) - 95;
                   setSpeechVolume(speechLevel);
                   setNoiseVolume(-100);
                 }}
@@ -342,8 +342,8 @@ function App() {
             maxVal={100}
             onChange={(val) => {
               setBnl(val);
-              // Map Display dB (25-100) to WebAudio dB (-60 to +15)
-              setNoiseVolume(val - 85);
+              // Map Display dB (25-100) to WebAudio dB (-70 to +5)
+              setNoiseVolume(val - 95);
             }}
             onConfirm={handleBnlConfirm}
             onBack={() => setPhase('mcl')}
@@ -351,9 +351,9 @@ function App() {
             onPlay={() => {
               play();
               // Keep speech at MCL
-              setSpeechVolume((mcl !== null ? mcl : 50) - 85);
+              setSpeechVolume((mcl !== null ? mcl : 50) - 95);
               // Noise is at current BNL
-              setNoiseVolume((bnl !== null ? bnl : 25) - 85);
+              setNoiseVolume((bnl !== null ? bnl : 25) - 95);
             }}
             onStop={stop}
           />

@@ -21,13 +21,13 @@ const Calibration = ({ onComplete, onBack }) => {
         setActiveTest('right');
         play();
         setSpeechVolume(-100); // Mute Speech (Left)
-        setNoiseVolume(-25); // -25dB (Right, corresponds to 60dB Display)
+        setNoiseVolume(-25); // -25dB (Right, corresponds to 70dB Display)
     };
 
     const testLeft = () => {
         setActiveTest('left');
         play();
-        setSpeechVolume(-25); // -25dB (Left, corresponds to 60dB Display)
+        setSpeechVolume(-25); // -25dB (Left, corresponds to 70dB Display)
         setNoiseVolume(-100); // Mute Noise (Right)
     };
 
