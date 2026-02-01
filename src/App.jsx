@@ -140,7 +140,11 @@ function App() {
   };
 
   const skipCalibration = () => {
-    setPhase('mcl');
+    if (testMode === 'auto') {
+      setPhase('auto_test');
+    } else {
+      setPhase('mcl');
+    }
   };
 
   const restartFull = () => {
@@ -154,10 +158,24 @@ function App() {
     // Let's keep it for now.
   };
 
+  const restartTest = (testId) => {
+    setMcl(null);
+    setBnl(null);
+    if (testId === 'A') {
+      setResultsA(null);
+      setActiveTestId('A');
+      setPhase('calibration');
+    } else {
+      setResultsB(null);
+      setActiveTestId('B');
+      setPhase('choice_calibration');
+    }
+  };
+
   return (
     <div className="app-container">
       <header>
-        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.21</span></h1>
+        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.22</span></h1>
         {patientName && (
           <div className="patient-badge" style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#64748b' }}>
             Patient: <strong style={{ color: '#fff' }}>{patientName}</strong>
@@ -391,6 +409,7 @@ function App() {
             patientName={patientName}
             testDate={testDate}
             onSave={savePatientData}
+            onRestartTest={restartTest}
           />
         )}
       </main>

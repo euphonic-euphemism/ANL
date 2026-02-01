@@ -3,7 +3,7 @@ import React, { useRef } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTestB, onRestart, patientName, testDate, onSave }) => {
+const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTestB, onRestart, patientName, testDate, onSave, onRestartTest }) => {
   const reportRef = useRef(null);
 
   // Export PDF
@@ -72,6 +72,20 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
               {data.avgExcursion > 5 && <span style={{ fontSize: '0.7rem', color: '#f87171' }}>Low Reliability</span>}
             </div>
           )}
+
+          {/* Automatic Mode Metrics */}
+          {data.score && data.validity && (
+            <>
+              <div className="score-item" style={{ borderLeft: '1px solid #475569', paddingLeft: '1rem' }}>
+                <span className="label" title="Estimated ANL (Last Level)">eANL</span>
+                <span className="value">{data.score.eANL} dB</span>
+              </div>
+              <div className="score-item">
+                <span className="label" title="Average ANL (Reversals)">aANL</span>
+                <span className="value">{data.validity.aANL !== null ? data.validity.aANL + ' dB' : 'N/A'}</span>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="final-score" style={{ borderColor: color, padding: '1.5rem 1rem' }}>
@@ -80,6 +94,19 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
         </div>
 
         <p className="probability" style={{ fontSize: '1rem' }}>{probability}</p>
+
+        {data.validity && data.validity.reliability_status && (
+          <div style={{ marginTop: '1rem', paddingTop: '0.5rem', borderTop: '1px solid #334155', fontSize: '0.85rem' }}>
+            <span style={{ color: '#94a3b8' }}>Reliability: </span>
+            <strong style={{
+              color: data.validity.reliability_status === 'High' ? '#4ade80' :
+                data.validity.reliability_status === 'Medium' ? '#facc15' : '#f87171'
+            }}>
+              {data.validity.reliability_status}
+            </strong>
+            {data.validity.reliability_diff !== null && <span style={{ color: '#64748b', marginLeft: '0.5rem' }}>(Diff: {data.validity.reliability_diff} dB)</span>}
+          </div>
+        )}
       </div>
     );
   };
@@ -104,6 +131,9 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
           <button className="secondary-btn" onClick={onExportPartial => alert("Please save partial results or continue to Test B for full report.")}>
             Export Partial Results (Note: Full Report available after Test B)
           </button>
+          <button className="secondary-btn" style={{ marginTop: '1rem', borderColor: '#64748b', color: '#cbd5e1' }} onClick={() => onRestartTest('A')}>
+            Restart Test A
+          </button>
         </div>
         <style>{`
   .results - container { max - width: 600px; margin: 0 auto; }
@@ -123,21 +153,23 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
   const scoreA = calculateScore(resultsA);
   const scoreB = calculateScore(resultsB);
 
-  // Improvement based on BNL (Background Noise Level).
-  // Higher BNL means patient tolerates more noise, which is better.
-  // So Improvement = BNL_B - BNL_A
-  const improvement = resultsB.bnl - resultsA.bnl;
+  // Improvement based on ANL score.
+  // Lower ANL is better.
+  // Improvement = ANL_B (New) - ANL_A (Current)
+  // Negative result means Test B is lower result (Better).
+  const improvement = scoreB.anl - scoreA.anl;
 
   const getInterpretation = (diff) => {
     const abs = Math.abs(diff);
     if (abs < 3) return { text: "No Significant Change", color: "#94a3b8" }; // Grey
 
-    const direction = diff > 0 ? "Improvement" : "Decline";
+    // For ANL, Negative difference is Improvement (Lower score).
+    const direction = diff < 0 ? "Improvement" : "Decline";
     const significance = abs >= 4 ? "Significant" : "Likely";
     const confidence = abs >= 4 ? "95% Confidence" : "80% Confidence";
 
-    // Green for improvement (higher BNL), Red for decline
-    const color = diff > 0 ? "#4ade80" : "#f87171";
+    // Green for improvement (negative diff), Red for decline
+    const color = diff < 0 ? "#4ade80" : "#f87171";
 
     return { text: `${significance} ${direction} (${confidence})`, color };
   };
@@ -148,7 +180,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
       <div ref={reportRef} style={{ padding: '2rem', background: '#0f172a', borderRadius: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #334155', paddingBottom: '1rem' }}>
-          <h2 style={{ margin: 0 }}>ANL Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.2</span></h2>
+          <h2 style={{ margin: 0 }}>ANL Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.22</span></h2>
           <div style={{ textAlign: 'right', fontSize: '0.9rem', color: '#94a3b8' }}>
             <div>Patient: <strong style={{ color: '#fff' }}>{patientName || "N/A"}</strong></div>
             <div>Date: {testDate || new Date().toLocaleDateString()}</div>
@@ -165,7 +197,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
         <div className="card summary-card" style={{ textAlign: 'center', maxWidth: '600px', margin: '0 auto', background: '#1e293b' }}>
           <h3>Outcome</h3>
           <p style={{ fontSize: '1.2rem' }}>
-            Benefit in BNL (Test B - Test A): <strong style={{ color: interpretation.color }}>{improvement > 0 ? '+' : ''}{improvement} dB</strong>
+            Benefit in ANL (Test B - Test A): <strong style={{ color: interpretation.color }}>{improvement > 0 ? '+' : ''}{improvement} dB</strong>
           </p>
           <p style={{ fontSize: '1.1rem', fontWeight: 600, color: interpretation.color, marginTop: '-0.5rem' }}>
             {interpretation.text}
@@ -184,9 +216,22 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
         <button className="secondary-btn" onClick={onSave} style={{ background: '#3b82f6', borderColor: '#2563eb' }}>
           Save Data (JSON)
         </button>
+
         <button className="secondary-btn" onClick={onRestart}>
           Start New Patient
         </button>
+      </div>
+
+      <div className="restart-section" style={{ marginTop: '1.5rem', borderTop: '1px solid #334155', paddingTop: '1.5rem', textAlign: 'center' }}>
+        <p style={{ color: '#94a3b8', marginBottom: '1rem', fontSize: '0.9rem' }}>Retest Specific Phase</p>
+        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+          <button className="secondary-btn" style={{ borderColor: '#64748b', color: '#cbd5e1' }} onClick={() => onRestartTest('A')}>
+            Restart Test A
+          </button>
+          <button className="secondary-btn" style={{ borderColor: '#64748b', color: '#cbd5e1' }} onClick={() => onRestartTest('B')}>
+            Restart Test B
+          </button>
+        </div>
       </div>
 
       <style>{`

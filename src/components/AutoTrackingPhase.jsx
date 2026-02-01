@@ -30,6 +30,7 @@ const AutoTrackingPhase = ({
         reversalCount: 0, // Renamed from reversals
         dbPerSecond: INITIAL_RATE, // Renamed from rate
         reversalLevels: [], // Capture levels at reversal points
+        lastReversalTime: 0, // Debounce: Timestamp of last valid reversal
         lastUpdate: 0,
         stats: { slope: 0, stdDev: 0, mean: 0 },
         isFinishing: false
@@ -58,26 +59,118 @@ const AutoTrackingPhase = ({
         return count > 0 ? (sumDiffs / count).toFixed(1) : 0;
     };
 
+    // Live Metrics State
+    const [currentEANL, setCurrentEANL] = useState(null);
+    const [currentAANL, setCurrentAANL] = useState(null);
+
+    // Helper: Calculate Metrics from current state
+    const calculateLiveMetrics = (currentNoise, reversalLevels, speechLvl) => {
+        // eANL
+        const eANL = speechLvl - currentNoise;
+
+        // aANL
+        let aANL = null;
+        if (reversalLevels.length >= 4) { // Need at least 4 to have any left after discarding 3
+            const validReversals = reversalLevels.slice(3);
+            if (validReversals.length > 0) {
+                const sum = validReversals.reduce((a, b) => a + b, 0);
+                const aBNL = sum / validReversals.length;
+                aANL = speechLvl - aBNL;
+            }
+        }
+
+        return { eANL, aANL };
+    };
+
+    // Generate Final Results (Hybrid ANL/TNT Logic)
+    const generateFinalResults = (history, speechLevel, stoppingReason) => {
+        // ... (Logic is effectively same as live, but using final points)
+        // We can reuse the same concepts but keeping existing function for safety/exactness
+
+        // 1. Calculate "Estimated" Metrics (The Score)
+        const finalPoint = history[history.length - 1];
+        const eBNL = finalPoint ? finalPoint.noise : speechLevel - 10;
+        const eANL = speechLevel - eBNL;
+
+        // 2. Calculate "Average" Metrics
+        const reversals = [];
+        for (let i = 1; i < history.length - 1; i++) {
+            const prev = history[i - 1].noise;
+            const curr = history[i].noise;
+            const next = history[i + 1].noise;
+            if ((curr > prev && curr > next) || (curr < prev && curr < next)) {
+                reversals.push(curr);
+            }
+        }
+
+        let aBNL = null;
+        let aANL = null;
+        if (reversals.length >= 4) {
+            const validReversals = reversals.slice(3);
+            if (validReversals.length > 0) {
+                const sum = validReversals.reduce((a, b) => a + b, 0);
+                aBNL = parseFloat((sum / validReversals.length).toFixed(1));
+                aANL = parseFloat((speechLevel - aBNL).toFixed(1));
+            }
+        }
+
+        // 3. Determine Reliability Status
+        let reliability_status = "Unknown/Insufficient Data";
+        let reliability_diff = null;
+
+        if (aANL !== null) {
+            const diff = Math.abs(eANL - aANL);
+            reliability_diff = parseFloat(diff.toFixed(1));
+
+            if (diff <= 2.0) {
+                reliability_status = "High";
+            } else if (diff <= 4.0) {
+                reliability_status = "Medium";
+            } else {
+                reliability_status = "Low";
+            }
+        }
+
+        // 4. Return Structured Object
+        return {
+            score: {
+                eANL: parseFloat(eANL.toFixed(1)),
+                eBNL: parseFloat(eBNL.toFixed(1))
+            },
+            validity: {
+                aANL: aANL,
+                aBNL: aBNL,
+                reliability_status,
+                reliability_diff
+            },
+            meta: {
+                speech_level: speechLevel,
+                reversal_count: reversals.length,
+                duration_seconds: finalPoint ? parseFloat(finalPoint.t.toFixed(1)) : 0
+            }
+        };
+    };
+
     // Helper to safely finish
     const finishTest = (finalHistory, reason) => {
         if (stateRef.current.isFinishing) return;
         stateRef.current.isFinishing = true;
 
-        let finalBnl = stateRef.current.noiseLevel;
-        if (reason === "Stable Criteria Met" && stateRef.current.stats) {
-            finalBnl = stateRef.current.stats.mean;
-        }
+        const results = generateFinalResults(finalHistory, speechLevel, reason);
+        const { score, validity } = results;
 
-        const avgExcursion = calculateExcursionWidth(stateRef.current.reversalLevels);
-        console.log(`[AutoTracking] Finishing: ${reason}. Final BNL: ${finalBnl}. Avg Excursion: ${avgExcursion}`);
+        console.log(`[AutoTracking] Finished: ${reason}`, results);
 
         setTimeout(() => {
             setIsPlaying(false);
             setIsFinished(true);
+
+            // Merge with fields expected by Results.jsx
             onComplete({
+                ...results, // Include full structured object
                 mcl: speechLevel,
-                bnl: Math.round(finalBnl),
-                avgExcursion: parseFloat(avgExcursion),
+                bnl: Math.round(score.eBNL), // Backward compatibility
+                avgExcursion: parseFloat(calculateExcursionWidth(stateRef.current.reversalLevels)), // Keep excursion if Results uses it
                 reason
             });
         }, 0);
@@ -131,13 +224,22 @@ const AutoTrackingPhase = ({
 
                     // Detect Reversal: If direction changes
                     if (isNoiseIncreasing !== stateRef.current.isNoiseIncreasing) {
-                        stateRef.current.reversalCount += 1;
-                        stateRef.current.reversalLevels.push(stateRef.current.noiseLevel); // Capture Level
-                        setReversalCount(stateRef.current.reversalCount); // Update UI state
+                        const now = Date.now();
 
-                        // Adapt Rate
-                        if (stateRef.current.reversalCount >= REVERSAL_THRESHOLD) {
-                            stateRef.current.dbPerSecond = SLOW_RATE;
+                        // Debounce: Only count if > 500ms since last reversal
+                        if (now - stateRef.current.lastReversalTime > 500) {
+                            stateRef.current.reversalCount += 1;
+                            stateRef.current.reversalLevels.push(stateRef.current.noiseLevel); // Capture Level
+                            stateRef.current.lastReversalTime = now;
+                            setReversalCount(stateRef.current.reversalCount); // Update UI state
+
+                            // Adapt Rate
+                            if (stateRef.current.reversalCount >= REVERSAL_THRESHOLD) {
+                                stateRef.current.dbPerSecond = SLOW_RATE;
+                            }
+                        } else {
+                            // Ignored Reversal (Jitter/Double-click)
+                            console.log("Reversal ignored (debounce)", now - stateRef.current.lastReversalTime);
                         }
 
                         stateRef.current.isNoiseIncreasing = isNoiseIncreasing;
@@ -153,6 +255,11 @@ const AutoTrackingPhase = ({
 
                     stateRef.current.noiseLevel = newNoise;
                     setNoiseLevel(newNoise);
+
+                    // --- Live Metrics Update (New) ---
+                    const metrics = calculateLiveMetrics(newNoise, stateRef.current.reversalLevels, speechLevel);
+                    setCurrentEANL(metrics.eANL.toFixed(1));
+                    setCurrentAANL(metrics.aANL !== null ? metrics.aANL.toFixed(1) : null);
 
                     // Update Audio
                     setNoiseVolume(newNoise - 95);
@@ -197,7 +304,7 @@ const AutoTrackingPhase = ({
 
                                 // Criteria: Slope approx 0 (+/- 0.05) AND Variance/SD < 2
                                 if (Math.abs(slope) <= 0.05 && stdDev < 2.0) {
-                                    finishTest(newHistory, "Stable Criteria Met");
+                                    finishTest(newHistory, "Stable Criteria Met", mean);
                                     return newHistory;
                                 }
                             }
@@ -228,12 +335,15 @@ const AutoTrackingPhase = ({
             reversalCount: 0,
             dbPerSecond: INITIAL_RATE,
             reversalLevels: [], // Initialize array to prevent crash
+            lastReversalTime: 0,
             lastUpdate: Date.now(),
             stats: { slope: 0, stdDev: 0, mean: 0 },
             isFinishing: false
         };
         setNoiseLevel(startLevel);
         setReversalCount(0);
+        setCurrentEANL(null); // Reset
+        setCurrentAANL(null);
         setHistory([{ t: 0, noise: startLevel }]);
         setStartTime(Date.now());
         setIsPlaying(true);
@@ -378,6 +488,13 @@ const AutoTrackingPhase = ({
                     <span className="badge">Reversals: <strong>{reversalCount}</strong></span>
                     <span className="badge" style={{ opacity: reversalCount >= 6 ? 1 : 0.5 }}>
                         Rate: <strong>{reversalCount >= 6 ? '0.5' : '1.0'} dB/s</strong>
+                    </span>
+                    {/* Live Metrics */}
+                    <span className="badge" style={{ background: '#334155', border: '1px solid #475569' }}>
+                        eANL: <strong>{currentEANL !== null ? currentEANL : '--'} dB</strong>
+                    </span>
+                    <span className="badge" style={{ background: '#334155', border: '1px solid #475569', opacity: currentAANL ? 1 : 0.5 }}>
+                        aANL: <strong>{currentAANL !== null ? currentAANL : '--'} dB</strong>
                     </span>
                 </div>
             </div>
