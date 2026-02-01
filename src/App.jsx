@@ -18,7 +18,7 @@ function App() {
   const [resultsB, setResultsB] = useState(null); // { mcl, bnl }
   const [activeTestId, setActiveTestId] = useState('A'); // 'A' or 'B'
   const [testMode, setTestMode] = useState('manual'); // 'manual' or 'auto'
-  const [autoSpeechLevel, setAutoSpeechLevel] = useState(65); // 65 or 75 dB fixed
+  const [autoSpeechLevel, setAutoSpeechLevel] = useState(75); // Fixed at 75 dB for Auto Mode
 
   // Current Active Values
   const [mcl, setMcl] = useState(null);
@@ -157,7 +157,7 @@ function App() {
   return (
     <div className="app-container">
       <header>
-        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.17</span></h1>
+        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.18</span></h1>
         {patientName && (
           <div className="patient-badge" style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#64748b' }}>
             Patient: <strong style={{ color: '#fff' }}>{patientName}</strong>
@@ -228,25 +228,8 @@ function App() {
               {testMode === 'auto' && (
                 <div style={{ marginTop: '1rem' }}>
                   <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8' }}>Fixed Speech Level</label>
-                  <div style={{ display: 'flex', gap: '1rem' }}>
-                    <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <input
-                        type="radio"
-                        value="65"
-                        checked={autoSpeechLevel === 65}
-                        onChange={() => setAutoSpeechLevel(65)}
-                      />
-                      65 dB
-                    </label>
-                    <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <input
-                        type="radio"
-                        value="75"
-                        checked={autoSpeechLevel === 75}
-                        onChange={() => setAutoSpeechLevel(75)}
-                      />
-                      75 dB
-                    </label>
+                  <div style={{ padding: '0.5rem', background: '#334155', borderRadius: '4px', color: '#cbd5e1', display: 'inline-block' }}>
+                    75 dB
                   </div>
                 </div>
               )}
