@@ -154,7 +154,7 @@ function App() {
   return (
     <div className="app-container">
       <header>
-        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.10</span></h1>
+        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.11</span></h1>
         {patientName && (
           <div className="patient-badge" style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#64748b' }}>
             Patient: <strong style={{ color: '#fff' }}>{patientName}</strong>
@@ -318,6 +318,14 @@ function App() {
             }}
             onConfirm={handleBnlConfirm}
             onBack={() => setPhase('mcl')}
+            onPlay={() => {
+              play();
+              // Keep speech at MCL
+              setSpeechVolume((mcl !== null ? mcl : 50) - 85);
+              // Noise is at current BNL
+              setNoiseVolume((bnl !== null ? bnl : 25) - 85);
+            }}
+            onStop={stop}
           />
         )}
 
