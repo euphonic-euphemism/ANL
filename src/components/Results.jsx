@@ -1,7 +1,7 @@
-
 import React, { useRef } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import TestGraph from './TestGraph';
 
 const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTestB, onRestart, patientName, testDate, onSave, onRestartTest }) => {
   const reportRef = useRef(null);
@@ -68,8 +68,8 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
             <div className="score-item">
               <span className="label">Excursion</span>
               <span className="value">{data.avgExcursion} dB</span>
-              {data.avgExcursion < 4 && <span style={{ fontSize: '0.7rem', color: '#4ade80' }}>High Reliability</span>}
-              {data.avgExcursion > 5 && <span style={{ fontSize: '0.7rem', color: '#f87171' }}>Low Reliability</span>}
+              {data.avgExcursion < 4 && <span style={{ fontSize: '0.7rem', color: '#4ade80' }}>High Confidence</span>}
+              {data.avgExcursion > 5 && <span style={{ fontSize: '0.7rem', color: '#f87171' }}>Low Confidence</span>}
             </div>
           )}
 
@@ -111,18 +111,23 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
     );
   };
 
-  // Prepare content for PDF
-  // We wrap everything in a ref div to capture it
-
   // If only A is done (and we are still in activeTest A flow context which led here)
   if (activeTestId === 'A' && !resultsB) {
-    const scoreA = calculateScore(resultsA);
     return (
       <div className="card results-container">
         <h2>Test A Complete</h2>
         <div className="result-single">
           {renderCard(labelA, resultsA)}
         </div>
+
+        {resultsA?.history && (
+          <div style={{ marginTop: '2rem' }}>
+            <h3 style={{ textAlign: 'center', marginBottom: '1rem' }}>Tracking History</h3>
+            <div style={{ height: '250px', background: '#1e293b', borderRadius: '12px', padding: '1rem' }}>
+              <TestGraph history={resultsA.history} speechLevel={resultsA.mcl} width={500} height={250} />
+            </div>
+          </div>
+        )}
 
         <div className="action-buttons" style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <button className="confirm-btn" onClick={onStartTestB}>
@@ -136,14 +141,14 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
           </button>
         </div>
         <style>{`
-  .results - container { max - width: 600px; margin: 0 auto; }
-                    .score - display { display: flex; justify - content: space - around; margin - bottom: 1.5rem; }
-                    .score - item { display: flex; flex - direction: column; }
-                    .label { font - size: 0.8rem; color: #94a3b8; }
-                    .value { font - size: 1.5rem; font - weight: 600; }
-                    .final - score { border: 2px solid; border - radius: 12px; margin - bottom: 1rem; }
-                    .anl - value { font - weight: 800; line - height: 1; display: block; }
-                    .anl - label { display: block; margin - bottom: 0.5rem; }
+  .results-container { max-width: 600px; margin: 0 auto; }
+                    .score-display { display: flex; justify-content: space-around; margin-bottom: 1.5rem; }
+                    .score-item { display: flex; flex-direction: column; }
+                    .label { font-size: 0.8rem; color: #94a3b8; }
+                    .value { font-size: 1.5rem; font-weight: 600; }
+                    .final-score { border: 2px solid; border-radius: 12px; margin-bottom: 1rem; }
+                    .anl-value { font-weight: 800; line-height: 1; display: block; }
+                    .anl-label { display: block; margin-bottom: 0.5rem; }
 `}</style>
       </div>
     );
@@ -154,9 +159,6 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
   const scoreB = calculateScore(resultsB);
 
   // Improvement based on ANL score.
-  // Lower ANL is better.
-  // Improvement = ANL_B (New) - ANL_A (Current)
-  // Negative result means Test B is lower result (Better).
   const improvement = scoreB.anl - scoreA.anl;
 
   const getInterpretation = (diff) => {
@@ -180,7 +182,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
       <div ref={reportRef} style={{ padding: '2rem', background: '#0f172a', borderRadius: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #334155', paddingBottom: '1rem' }}>
-          <h2 style={{ margin: 0 }}>ANL Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.22</span></h2>
+          <h2 style={{ margin: 0 }}>ANL Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.1.0</span></h2>
           <div style={{ textAlign: 'right', fontSize: '0.9rem', color: '#94a3b8' }}>
             <div>Patient: <strong style={{ color: '#fff' }}>{patientName || "N/A"}</strong></div>
             <div>Date: {testDate || new Date().toLocaleDateString()}</div>
@@ -207,6 +209,31 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
             (Change ≥ 4 dB is significant at 95% CI; ≥ 3 dB at 80% CI)
           </p>
         </div>
+
+        {/* Graphs - Side by Side if available */}
+        {(resultsA?.history || resultsB?.history) && (
+          <div style={{ marginTop: '2rem' }}>
+            <h3 style={{ textAlign: 'center', marginBottom: '1rem' }}>Tracking History</h3>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+              {resultsA?.history && (
+                <div className="card" style={{ flex: 1, minWidth: '400px', padding: '1rem', background: '#1e293b' }}>
+                  <h4 style={{ textAlign: 'center', marginBottom: '0.5rem' }}>{labelA}</h4>
+                  <div style={{ height: '250px' }}>
+                    <TestGraph history={resultsA.history} speechLevel={resultsA.mcl} width={400} height={250} />
+                  </div>
+                </div>
+              )}
+              {resultsB?.history && (
+                <div className="card" style={{ flex: 1, minWidth: '400px', padding: '1rem', background: '#1e293b' }}>
+                  <h4 style={{ textAlign: 'center', marginBottom: '0.5rem' }}>{labelB}</h4>
+                  <div style={{ height: '250px' }}>
+                    <TestGraph history={resultsB.history} speechLevel={resultsB.mcl} width={400} height={250} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="action-row" style={{ marginTop: '2rem', display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -235,17 +262,16 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
       </div>
 
       <style>{`
-  .score - display { display: flex; justify - content: space - around; margin - bottom: 1.5rem; }
-                    .score - item { display: flex; flex - direction: column; }
-                    .label { font - size: 0.8rem; color: #94a3b8; }
-                    .value { font - size: 1.5rem; font - weight: 600; }
-                    .final - score { border: 2px solid; border - radius: 12px; margin - bottom: 1rem; }
-                    .anl - value { font - weight: 800; line - height: 1; display: block; }
-                    .anl - label { display: block; margin - bottom: 0.5rem; }
+  .score-display { display: flex; justify-content: space-around; margin-bottom: 1.5rem; }
+                    .score-item { display: flex; flex-direction: column; }
+                    .label { font-size: 0.8rem; color: #94a3b8; }
+                    .value { font-size: 1.5rem; font-weight: 600; }
+                    .final-score { border: 2px solid; border-radius: 12px; margin-bottom: 1rem; }
+                    .anl-value { font-weight: 800; line-height: 1; display: block; }
+                    .anl-label { display: block; margin-bottom: 0.5rem; }
 `}</style>
     </div>
   );
 };
 
 export default Results;
-

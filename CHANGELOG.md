@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.23] - 2026-02-01
+
+### Added
+- **Stabilization Metrics**: Added `stabilization_seconds` (time of 3rd reversal) and interpretation status to results.
+
+### Changed
+- **Automatic Test UI**: Reverted side-by-side graphs in the active test view to a single, larger graph for better visibility.
+
 ## [1.0.22] - 2026-02-01
 
 ### Added
