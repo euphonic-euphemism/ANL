@@ -1,7 +1,7 @@
 {
   "name": "accept-noise-level",
   "private": true,
-  "version": "1.0.12",
+  "version": "1.0.13",
   "author": "Audiology Team <admin@example.com>",
   "description": "Acceptable Noise Level (ANL) Test Application",
   "homepage": "https://github.com/euphonic-euphemism/ANL",

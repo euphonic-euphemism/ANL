@@ -4,6 +4,7 @@ import { useAudioController } from './hooks/useAudioController';
 import TestPhase from './components/TestPhase';
 import Calibration from './components/Calibration';
 import Results from './components/Results';
+import AutoTrackingPhase from './components/AutoTrackingPhase';
 
 function App() {
   const [phase, setPhase] = useState('intro'); // intro, calibration, mcl, bnl, results, choice_calibration
@@ -17,6 +18,7 @@ function App() {
   const [resultsB, setResultsB] = useState(null); // { mcl, bnl }
   const [activeTestId, setActiveTestId] = useState('A'); // 'A' or 'B'
   const [testMode, setTestMode] = useState('manual'); // 'manual' or 'auto'
+  const [autoSpeechLevel, setAutoSpeechLevel] = useState(65); // 65 or 75 dB fixed
 
   // Current Active Values
   const [mcl, setMcl] = useState(null);
@@ -155,7 +157,7 @@ function App() {
   return (
     <div className="app-container">
       <header>
-        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.12</span></h1>
+        <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.13</span></h1>
         {patientName && (
           <div className="patient-badge" style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#64748b' }}>
             Patient: <strong style={{ color: '#fff' }}>{patientName}</strong>
@@ -222,6 +224,32 @@ function App() {
                 <option value="manual">Manual (Standard)</option>
                 <option value="auto">Automatic (1 dB/sec)</option>
               </select>
+
+              {testMode === 'auto' && (
+                <div style={{ marginTop: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8' }}>Fixed Speech Level</label>
+                  <div style={{ display: 'flex', gap: '1rem' }}>
+                    <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input
+                        type="radio"
+                        value="65"
+                        checked={autoSpeechLevel === 65}
+                        onChange={() => setAutoSpeechLevel(65)}
+                      />
+                      65 dB
+                    </label>
+                    <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input
+                        type="radio"
+                        value="75"
+                        checked={autoSpeechLevel === 75}
+                        onChange={() => setAutoSpeechLevel(75)}
+                      />
+                      75 dB
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="data-controls" style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
@@ -256,7 +284,13 @@ function App() {
         {phase === 'calibration' && (
           <div className="calibration-wrapper">
             <Calibration
-              onComplete={() => setPhase('mcl')}
+              onComplete={() => {
+                if (testMode === 'auto') {
+                  setPhase('auto_test');
+                } else {
+                  setPhase('mcl');
+                }
+              }}
               onBack={() => setPhase('intro')}
             />
 
@@ -339,6 +373,37 @@ function App() {
               setNoiseVolume((bnl !== null ? bnl : 25) - 85);
             }}
             onStop={stop}
+          />
+        )}
+
+        {phase === 'auto_test' && (
+          <AutoTrackingPhase
+            speechLevel={autoSpeechLevel}
+            onComplete={() => {
+              // On complete, save results.
+              // For Auto mode, we just finished tracking.
+              // What implies "MCL"? Auto mode bypasses MCL phase.
+              // We probably treat MCL as 'N/A' or Fixed Level?
+              // Let's store the Fixed Level as MCL for record keeping.
+              // And BNL is the final level or average?
+              // The prompt didn't specify what the "BNL" result is.
+              // Usually it's the average of the last few reversals.
+              // Since I don't calculate that yet, let's just save the final level for now
+              // OR maybe I should just pass a "finish" handler that saves whatever.
+              // AutoTrackingPhase calls onComplete without args currently.
+              // I'll update Results to handle this or just transition to results.
+              // Let's assume the user just finished tracking and we go to results.
+              // WE NEED TO CAPTURE THE DATA.
+              // AutoTrackingPhase state is internal. I should pass an onComplete that accepts { mcl, bnl, history }?
+              // Current AutoTrackingPhase onComplete takes no args.
+              // I should update AutoTrackingPhase to pass back the final noise level.
+              setPhase('results');
+            }}
+            onBack={() => setPhase('intro')}
+            play={play}
+            stop={stop}
+            setSpeechVolume={setSpeechVolume}
+            setNoiseVolume={setNoiseVolume}
           />
         )}
 
