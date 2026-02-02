@@ -141,8 +141,12 @@ function App() {
     setActiveTestId('B');
     setMcl(null);
     setBnl(null);
-    // Go to choice_calibration to ask if they need to recalibrate
-    setPhase('choice_calibration');
+    // Skip calibration check for Test B as requested
+    if (testMode === 'auto') {
+      setPhase('auto_test');
+    } else {
+      setPhase('mcl');
+    }
   };
 
   const startCalibration = () => {
@@ -186,7 +190,7 @@ function App() {
     <div className="app-container">
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.27</span></h1>
+          <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.28</span></h1>
           {patientName && (
             <div className="patient-badge" style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#64748b' }}>
               Patient: <strong style={{ color: '#fff' }}>{patientName}</strong>

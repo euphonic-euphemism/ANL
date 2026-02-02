@@ -33,18 +33,21 @@ export const calculateSignificance = (resultA, resultB) => {
         const isSig95 = diff > criticalDifference95;
         const isSig80 = diff > criticalDifference80;
 
+        const rawDiff = scoreB - scoreA;
+        const isImprovement = rawDiff < 0; // Lower ANL is better
+
         let status = "None";
         let message = "No Significant Difference";
         let color = "#94a3b8"; // Grey
 
         if (isSig95) {
             status = "Strong";
-            message = "Definite Improvement (95% CI)";
-            color = "#4ade80"; // Green
+            message = isImprovement ? "Definite Improvement (95% CI)" : "Definite Decline (95% CI)";
+            color = isImprovement ? "#4ade80" : "#f87171"; // Green or Red
         } else if (isSig80) {
             status = "Moderate";
-            message = "Likely Preference (80% CI)";
-            color = "#facc15"; // Yellow
+            message = isImprovement ? "Likely Improvement (80% CI)" : "Likely Decline (80% CI)";
+            color = isImprovement ? "#facc15" : "#f87171"; // Yellow or Red
         }
 
         return {

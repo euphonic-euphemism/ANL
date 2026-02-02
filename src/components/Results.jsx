@@ -169,12 +169,32 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
               </div>
             </>
           )}
+
+          {data.meta && data.meta.stabilization_seconds !== undefined && (
+            <div className="score-item" style={{ borderLeft: '1px solid #475569', paddingLeft: '1rem' }}>
+              <span className="label">Stabilized In</span>
+              {data.meta.stabilization_seconds !== null ? (
+                <span className="value" style={{ fontSize: '1.2rem' }}>{data.meta.stabilization_seconds}s</span>
+              ) : (
+                <span className="value" style={{ fontSize: '1.2rem', color: '#f87171' }}>Did Not Stabilize</span>
+              )}
+              {data.validity && data.validity.stabilization_status && data.meta.stabilization_seconds !== null && (
+                <span style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.2rem' }}>{data.validity.stabilization_status}</span>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="final-score" style={{ borderColor: color, padding: '1.5rem 1rem' }}>
           <span className="anl-label">ANL Score</span>
           <span className="anl-value" style={{ color: color, fontSize: '3rem' }}>{anl} dB</span>
         </div>
+
+        {data.reason && (
+          <div style={{ marginBottom: '1rem', fontSize: '0.8rem', color: '#64748b' }}>
+            Stop Reason: <span style={{ color: '#cbd5e1' }}>{data.reason}</span>
+          </div>
+        )}
 
         <p className="probability" style={{ fontSize: '1rem' }}>{probability}</p>
 
@@ -265,7 +285,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
       <div ref={reportRef} style={{ padding: '2rem', background: '#0f172a', borderRadius: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #334155', paddingBottom: '1rem' }}>
-          <h2 style={{ margin: 0 }}>ANL Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.27</span></h2>
+          <h2 style={{ margin: 0 }}>ANL Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.28</span></h2>
           <div style={{ textAlign: 'right', fontSize: '0.9rem', color: '#94a3b8' }}>
             <div>Patient: <strong style={{ color: '#fff' }}>{patientName || "N/A"}</strong></div>
             <div>Date: {testDate || new Date().toLocaleDateString()}</div>
