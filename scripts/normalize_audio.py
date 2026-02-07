@@ -7,7 +7,9 @@ files = [
     'public/audio/anl_speech.flac',
     'public/audio/anl_noise.flac',
     'public/audio/cal_pulse_R.flac',
-    'public/audio/cal_pulse_L.flac'
+    'public/audio/cal_pulse_L.flac',
+    'public/audio/cal_warble_L.flac',
+    'public/audio/cal_warble_R.flac'
 ]
 
 def get_mean_volume(file_path):

@@ -2,10 +2,9 @@ import React, { useState } from 'react';
 import { useAudioController } from '../hooks/useAudioController';
 
 const Calibration = ({ onComplete, onBack }) => {
-    // Use the calibration file
-    const [calType, setCalType] = useState('warble'); // 'standard' | 'warble'
-    const speechUrl = calType === 'standard' ? 'audio/cal_pulse_L.flac' : 'audio/cal_warble_L.flac';
-    const noiseUrl = calType === 'standard' ? 'audio/cal_pulse_R.flac' : 'audio/cal_warble_R.flac';
+    // Use the calibration file (Warble Tone Only)
+    const speechUrl = 'audio/cal_warble_L.flac';
+    const noiseUrl = 'audio/cal_warble_R.flac';
 
     const {
         isReady,
@@ -39,29 +38,10 @@ const Calibration = ({ onComplete, onBack }) => {
     return (
         <div className="card calibration-container">
             <h2>Audio Calibration</h2>
-            <p className="description">Select the calibration type below:</p>
-
-            <div className="calibration-type-selector">
-                <button
-                    className={`type-btn ${calType === 'standard' ? 'active' : ''}`}
-                    onClick={() => setCalType('standard')}
-                >
-                    Standard (Tones/Pulses)
-                </button>
-                <button
-                    className={`type-btn ${calType === 'warble' ? 'active' : ''}`}
-                    onClick={() => setCalType('warble')}
-                >
-                    Soundfield (Warble Tone)
-                </button>
-            </div>
+            <p className="description">Verify audio output using the Soundfield Warble Tone.</p>
 
             <div className="current-mode-info">
-                {calType === 'standard' ? (
-                    <p><strong>Standard Mode:</strong> Verify Tone (Right) and Noise Pulses (Left).</p>
-                ) : (
-                    <p><strong>Soundfield Mode:</strong> Verify Warble Tone on both channels.</p>
-                )}
+                <p><strong>Soundfield Mode:</strong> Verify Warble Tone on both channels.</p>
             </div>
 
             {!isReady ? (
@@ -80,14 +60,8 @@ const Calibration = ({ onComplete, onBack }) => {
 
             <div className="instructions">
                 <ul>
-                    {calType === 'standard' ? (
-                        null
-                    ) : (
-                        <>
-                            <li><strong>Right Channel:</strong> 10% Warble Tone</li>
-                            <li><strong>Left Channel:</strong> 10% Warble Tone</li>
-                        </>
-                    )}
+                    <li><strong>Right Channel:</strong> 5% Warble Tone</li>
+                    <li><strong>Left Channel:</strong> 5% Warble Tone</li>
                 </ul>
             </div>
 

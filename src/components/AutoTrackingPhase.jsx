@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './AutoTrackingPhase.css';
 import TestGraph from './TestGraph';
+import ReliabilityDashboard from './ReliabilityDashboard';
+import './ReliabilityDashboard.css';
 
 const AutoTrackingPhase = ({
     speechLevel, // 65 or 75
@@ -28,16 +30,18 @@ const AutoTrackingPhase = ({
         isSpaceHeld: false,
         isNoiseIncreasing: true, // Renamed from direction (derived boolean)
         reversalCount: 0, // Renamed from reversals
-        reversalCount: 0, // Renamed from reversals
         dbPerSecond: 2.0, // Initial fast rate
         reversalLevels: [], // Capture levels at reversal points
         lastReversalTime: 0, // Debounce: Timestamp of last valid reversal
         lastUpdate: 0,
         stats: { slope: 0, stdDev: 0, mean: 0 },
-        isFinishing: false
+        isFinishing: false,
+        // New: Track running average for aHANT (t > 30s)
+        sumNoiseAfter30: 0,
+        countNoiseAfter30: 0
     });
 
-    // Calculate Average Excursion Width
+    // Calculate Average Excursion Width (Existing helper, keeping for now)
     const calculateExcursionWidth = (levels) => {
         if (levels.length < 4) return 0; // Need at least 3 diffs (so 4 points)
 
@@ -58,38 +62,145 @@ const AutoTrackingPhase = ({
         return count > 0 ? (sumDiffs / count).toFixed(1) : 0;
     };
 
-    // Live Metrics State
+    // New Helper: Identify Reversal Points (Peaks and Valleys)
+    // Returns array of {x, y} coordinates, ignoring the first `ignoreSeconds`
+    const identifyReversalPoints = (history, ignoreSeconds = 30) => {
+        const validData = history.filter(pt => pt.t > ignoreSeconds);
+        if (validData.length < 3) return []; // Need at least 3 points for a peak/valley
+
+        const reversals = [];
+
+        for (let i = 1; i < validData.length - 1; i++) {
+            const prev = validData[i - 1].noise;
+            const curr = validData[i].noise;
+            const next = validData[i + 1].noise;
+
+            // Strict local extrema check (Peak: increasing->decreasing OR Valley: decreasing->increasing)
+            if ((curr > prev && curr > next) || (curr < prev && curr < next)) {
+                reversals.push({ x: validData[i].t, y: curr });
+            }
+        }
+        return reversals;
+    };
+
+    // New Helper: Calculate Average HANT (Running Average > 30s)
+    const calculateAverageHANT = (history, speechLvl) => {
+        const lateData = history.filter(pt => pt.t > 30);
+        if (lateData.length === 0) return { aBNL: null, aANL: null };
+
+        const sum = lateData.reduce((a, b) => a + b.noise, 0);
+        const aBNL = sum / lateData.length;
+        const aANL = aBNL - speechLvl;
+
+        return { aBNL, aANL, count: lateData.length };
+    };
+
     const [currentEANL, setCurrentEANL] = useState(null);
     const [currentAANL, setCurrentAANL] = useState(null);
+    const [currentSD, setCurrentSD] = useState(null); // New state for live SD
 
     // Helper: Calculate Metrics from current state
-    const calculateLiveMetrics = (currentNoise, reversalLevels, speechLvl) => {
+    const calculateLiveMetrics = (currentNoise, reversalLevels, speechLvl, sumNoiseAfter30, countNoiseAfter30) => {
         // eANL
-        const eANL = speechLvl - currentNoise;
+        const eANL = currentNoise - speechLvl;
 
-        // aANL
+        // aANL (Running Average after 30s)
         let aANL = null;
-        if (reversalLevels.length >= 4) {
-            const validReversals = reversalLevels.slice(3);
-            if (validReversals.length > 0) {
-                const sum = validReversals.reduce((a, b) => a + b, 0);
-                const aBNL = sum / validReversals.length;
-                aANL = speechLvl - aBNL;
-            }
+        if (countNoiseAfter30 > 0) {
+            const aBNL = sumNoiseAfter30 / countNoiseAfter30;
+            aANL = aBNL - speechLvl;
         }
 
         return { eANL, aANL };
     };
 
-    // Generate Final Results (Hybrid ANL/TNT Logic)
+    // New Helper: Calculate Mean Excursion Width (MEW)
+    // Input: Array of {x, y} reversal points
+    const calculateMeanExcursionWidth = (reversalPoints) => {
+        if (reversalPoints.length < 2) return 0; // Need at least 2 points to have a width
+
+        let sumWidths = 0;
+        let count = 0;
+
+        for (let i = 1; i < reversalPoints.length; i++) {
+            // Absolute difference between current reversal Y (dB) and previous reversal Y (dB)
+            const width = Math.abs(reversalPoints[i].y - reversalPoints[i - 1].y);
+            sumWidths += width;
+            count++;
+        }
+
+        return count > 0 ? sumWidths / count : 0;
+    };
+
+    // New Helper: Calculate Excursion Stats (Mean Width & Standard Deviation)
+    // Updated to accept {x,y} objects if available, or fall back to array of numbers
+    const calculateExcursionStats = (reversals) => {
+        // Handle both array of numbers (legacy) and array of objects {x,y}
+        const isObjectArray = reversals.length > 0 && typeof reversals[0] === 'object';
+        const values = isObjectArray ? reversals.map(r => r.y) : reversals;
+
+        if (values.length < 4) return { meanWidth: 0, sdWidth: 0 };
+
+        const widths = [];
+        for (let i = 1; i < values.length; i++) {
+            widths.push(Math.abs(values[i] - values[i - 1]));
+        }
+
+        if (widths.length === 0) return { meanWidth: 0, sdWidth: 0 };
+
+        const n = widths.length;
+        const meanWidth = widths.reduce((a, b) => a + b, 0) / n;
+        const variance = widths.reduce((a, b) => a + Math.pow(b - meanWidth, 2), 0) / (n > 1 ? n - 1 : 1);
+        const sdWidth = Math.sqrt(variance);
+
+        return { meanWidth, sdWidth };
+    };
+
+    // Generate Final Results (Hybrid ANL/TNT Logic - Updated eHANT)
     const generateFinalResults = (history, speechLevel, stoppingReason) => {
-        const finalPoint = history[history.length - 1];
-        const eBNL = finalPoint ? finalPoint.noise : speechLevel - 10;
-        const eANL = speechLevel - eBNL;
+        // --- Average HANT (Refined Logic: Peaks/Valleys after 30s) ---
+        // Using new identifyReversalPoints function
+        const reversalPoints = identifyReversalPoints(history, 30);
+
+        const finalPoint = history.length > 0 ? history[history.length - 1] : { t: 0, noise: speechLevel - 10 };
+
+        let eBNL;
+        if (reversalPoints.length > 0) {
+            // Calculate mean of the Y-values (Noise Levels) of the reversal points
+            const sum = reversalPoints.reduce((acc, pt) => acc + pt.y, 0);
+            eBNL = sum / reversalPoints.length;
+            console.log(`[AutoTracking] eHANT Calc: Found ${reversalPoints.length} peaks/valleys after 30s. Mean Noise: ${eBNL.toFixed(1)}`);
+        } else {
+            // Fallback: If no peaks/valleys after 30s (e.g. tracking too smooth or test too short),
+            // take average of all data points after 30s.
+            const lateData = history.filter(pt => pt.t > 30);
+            if (lateData.length > 0) {
+                const sum = lateData.reduce((a, b) => a + b.noise, 0);
+                eBNL = sum / lateData.length;
+                console.log(`[AutoTracking] eHANT Calc: No peaks found. Using average of trailing data (t>30s). Mean Noise: ${eBNL.toFixed(1)}`);
+            } else {
+                // Fallback 2: Test duration < 30s? Use final point.
+                eBNL = finalPoint.noise;
+                console.log(`[AutoTracking] eHANT Calc: Test < 30s. Using final point. Noise: ${eBNL.toFixed(1)}`);
+            }
+        }
+
+        // Apply Formula: eHANT = Noise - Speech
+        const eANL = eBNL - speechLevel;
+
+        // --- Average HANT (New Logic: External Function) ---
+        const { aBNL, aANL, count } = calculateAverageHANT(history, speechLevel);
+
+        if (aANL !== null) {
+            console.log(`[AutoTracking] aHANT Calc: Mean of ${count} points (t>30s). Mean Noise: ${aBNL.toFixed(1)}`);
+        } else {
+            console.log("[AutoTracking] aHANT Calc: Insufficient data (>30s) for aHANT.");
+        }
 
         const reversals = [];
         const reversalTimes = [];
 
+        // Legacy Reversal Identification (Keeping for Stats/Confidence checks)
         for (let i = 1; i < history.length - 1; i++) {
             const prev = history[i - 1].noise;
             const curr = history[i].noise;
@@ -113,21 +224,13 @@ const AutoTrackingPhase = ({
         };
         const stabilization_status = getStabilizationInterpretation(stabilization_seconds);
 
-        let aBNL = null;
-        let aANL = null;
-        if (reversals.length >= 4) {
-            const validReversals = reversals.slice(3);
-            if (validReversals.length > 0) {
-                const sum = validReversals.reduce((a, b) => a + b, 0);
-                aBNL = parseFloat((sum / validReversals.length).toFixed(1));
-                aANL = parseFloat((speechLevel - aBNL).toFixed(1));
-            }
-        }
 
         // Calculate Stats for Validity (Standard Error & CI)
         let finalStats = { se: 0, ci95: 0, stdDev: 0 };
+        let excursionStats = { meanWidth: 0, sdWidth: 0 };
+
         if (reversals.length >= 4) {
-            const validReversals = reversals.slice(3);
+            const validReversals = reversals.slice(3); // Drop first 3
             if (validReversals.length >= 4) { // Need at least 4 for valid stats
                 const n = validReversals.length;
                 const mean = validReversals.reduce((a, b) => a + b, 0) / n;
@@ -137,6 +240,10 @@ const AutoTrackingPhase = ({
                 const ci95 = 1.96 * se;
 
                 finalStats = { se, ci95, stdDev };
+
+                // Calculate Excursion Stats (Guessing Detection)
+                // Pass the new reversalPoints array (which contains {x,y})
+                excursionStats = calculateExcursionStats(reversalPoints);
             }
         }
 
@@ -149,10 +256,15 @@ const AutoTrackingPhase = ({
 
             if (diff <= 2.0) {
                 reliability_status = "High";
-            } else if (diff <= 4.0) {
-                reliability_status = "Medium";
+            } else if (diff <= 5.0) { // Updated from 4.0 to 5.0
+                reliability_status = "Moderate";
             } else {
                 reliability_status = "Low";
+            }
+
+            // Check for Guessing (High Excursion Deviation)
+            if (excursionStats.sdWidth > 4.0) {
+                reliability_status += " (Possible Guessing)";
             }
         }
 
@@ -168,7 +280,8 @@ const AutoTrackingPhase = ({
                 ci95: parseFloat(finalStats.ci95.toFixed(2)),
                 reliability_status,
                 reliability_diff,
-                stabilization_status
+                stabilization_status,
+                excursion_sd: parseFloat(excursionStats.sdWidth.toFixed(2)) // Export for debugging/display
             },
             meta: {
                 speech_level: speechLevel,
@@ -184,25 +297,42 @@ const AutoTrackingPhase = ({
         if (stateRef.current.isFinishing) return;
         stateRef.current.isFinishing = true;
 
-        const results = generateFinalResults(finalHistory, speechLevel, reason);
-        const { score, validity } = results;
+        // Force stop loop immediately
+        setIsPlaying(false);
+        setIsFinished(true);
 
-        console.log(`[AutoTracking] Finished: ${reason}`, results);
+        try {
+            const results = generateFinalResults(finalHistory, speechLevel, reason);
+            const { score, validity } = results;
 
-        setTimeout(() => {
-            setIsPlaying(false);
-            setIsFinished(true);
+            console.log(`[AutoTracking] Finished: ${reason}`, results);
 
-            // Merge with fields expected by Results.jsx
-            onComplete({
-                ...results, // Include full structured object
-                mcl: speechLevel,
-                bnl: Math.round(score.eBNL), // Backward compatibility
-                avgExcursion: parseFloat(calculateExcursionWidth(stateRef.current.reversalLevels)),
-                reason,
-                history: finalHistory // Pass full history for graphing
-            });
-        }, 0);
+            // Defer callback to next tick to allow UI update
+            setTimeout(() => {
+                onComplete({
+                    ...results, // Include full structured object
+                    mcl: speechLevel,
+                    bnl: Math.round(score.eBNL), // Backward compatibility
+                    avgExcursion: parseFloat(calculateExcursionWidth(stateRef.current.reversalLevels)),
+                    reason,
+                    history: finalHistory // Pass full history for graphing
+                });
+            }, 0);
+        } catch (error) {
+            console.error("[AutoTracking] Critical Error in finishTest:", error);
+            // Fallback: still try to finish so user isn't stuck
+            setTimeout(() => {
+                onComplete({
+                    score: { eANL: 0, eBNL: 0 },
+                    validity: { reliability_status: "Error" },
+                    mcl: speechLevel,
+                    bnl: speechLevel - 10,
+                    avgExcursion: 0,
+                    reason: `Error: ${reason}`,
+                    history: finalHistory
+                });
+            }, 0);
+        }
     };
 
     useEffect(() => {
@@ -248,6 +378,7 @@ const AutoTrackingPhase = ({
         if (isPlaying && !isFinished) {
             play();
             setSpeechVolume(speechLevel - 95);
+            setNoiseVolume(noiseLevel - 95); // Set initial noise volume immediately
 
             const getCurrentTrackingRate = (reversalCount) => {
                 // Warm Start Logic: Removed 2.0 dB/s sprint since we start at Speech-10
@@ -360,31 +491,67 @@ const AutoTrackingPhase = ({
                     stateRef.current.noiseLevel = newNoise;
                     setNoiseLevel(newNoise);
 
-                    const metrics = calculateLiveMetrics(newNoise, stateRef.current.reversalLevels, speechLevel);
+                    // Calculate Excursion Stats for live dashboard
+                    // Filter reversals for those after 30s to match MEW logic if possible, 
+                    // but for live stability we might want all. 
+                    // Let's use the same logic as final results: ignore first 30s
+                    // However, validReversals in final logic uses index slicing (dropping first 3). 
+                    // Let's stick to the IdentifyReversalPoints logic for consistency.
+                    // Accessing history here is expensive (state). 
+                    // Better to use stateRef.current.reversalLevels but that is just Y values. 
+                    // Wait, identifyReversalPoints needs history (time). 
+                    // Let's compromise: Use existing `stateRef.current.reversalLevels` for a rough SD check 
+                    // or just calculate it from the `reversalLevels` array we already track.
+
+                    const liveExcursionStats = calculateExcursionStats(stateRef.current.reversalLevels);
+
+                    const metrics = calculateLiveMetrics(
+                        newNoise,
+                        stateRef.current.reversalLevels,
+                        speechLevel,
+                        stateRef.current.sumNoiseAfter30,
+                        stateRef.current.countNoiseAfter30
+                    );
                     setCurrentEANL(metrics.eANL.toFixed(1));
                     setCurrentAANL(metrics.aANL !== null ? metrics.aANL.toFixed(1) : null);
+                    setCurrentSD(liveExcursionStats.sdWidth.toFixed(1));
 
                     setNoiseVolume(newNoise - 95);
 
                     const t = (now - startTime) / 1000;
+
+                    // Update Running Average for aHANT
+                    if (t > 30) {
+                        stateRef.current.sumNoiseAfter30 += newNoise;
+                        stateRef.current.countNoiseAfter30++;
+                    }
+
                     setHistory(prev => {
                         const newHistory = [...prev, { t, noise: newNoise }];
 
                         if (t >= 120) { // Timeout at 2 min
-                            finishTest(newHistory, "Timeout (2 min)");
+                            // Force stop loop logic by checking if we are already finishing
+                            if (!stateRef.current.isFinishing) {
+                                finishTest(newHistory, "Timeout (2 min)");
+                            }
+                            // Return history but loop should stop via isPlaying effect
                             return newHistory;
                         }
 
                         // Check Stopping Criteria
                         if (checkStoppingCriteria(newHistory, t, stateRef.current.reversalCount)) {
-                            finishTest(newHistory, "Stable Criteria Met");
+                            if (!stateRef.current.isFinishing) {
+                                finishTest(newHistory, "Stable Criteria Met");
+                            }
                             return newHistory;
                         }
 
                         return newHistory;
                     });
                 }
-                animationFrame = requestAnimationFrame(loop);
+                if (!stateRef.current.isFinishing) {
+                    animationFrame = requestAnimationFrame(loop);
+                }
             };
 
             stateRef.current.lastUpdate = Date.now();
@@ -397,6 +564,9 @@ const AutoTrackingPhase = ({
     }, [isPlaying, isFinished, speechLevel, play, stop, setSpeechVolume, setNoiseVolume, startTime]);
 
     const handleStart = () => {
+        // Fix: Call play() directly here to ensure AudioContext resumes within a user gesture
+        play();
+
         const startLevel = speechLevel - 10;
         stateRef.current = {
             noiseLevel: startLevel,
@@ -408,12 +578,15 @@ const AutoTrackingPhase = ({
             lastReversalTime: 0,
             lastUpdate: Date.now(),
             stats: { slope: 0, stdDev: 0, mean: 0 },
-            isFinishing: false
+            isFinishing: false,
+            sumNoiseAfter30: 0,
+            countNoiseAfter30: 0
         };
         setNoiseLevel(startLevel);
         setReversalCount(0);
         setCurrentEANL(null);
         setCurrentAANL(null);
+        setCurrentSD(null);
         setHistory([{ t: 0, noise: startLevel }]);
         setStartTime(Date.now());
         setIsPlaying(true);
@@ -427,30 +600,22 @@ const AutoTrackingPhase = ({
     return (
         <div className="auto-tracking-container card">
             <div className="header">
-                <h2>Automatic BNL Test</h2>
-                <p className="instruction" style={{ color: '#cbd5e1', margin: '1rem 0', fontSize: '1.1rem', fontStyle: 'italic' }}>
+                <h2>Hearing Aid Noise Tolerance Test</h2>
+                <p className="instruction" style={{ color: '#cbd5e1', margin: '0.5rem 0 1.5rem', fontSize: '1.1rem', fontStyle: 'italic' }}>
                     "Instruct listeners to maintain the noise at the highest level where they can still understand ≥90% of the words."
                 </p>
-                <div className="status-badges">
-                    <span className="badge">Speech: <strong>{speechLevel} dB</strong></span>
-                    <span className="badge">Noise: <strong>{noiseLevel.toFixed(1)} dB</strong></span>
-                    <span className="badge">Reversals: <strong>{reversalCount}</strong></span>
-                    <span className="badge">Reversals: <strong>{reversalCount}</strong></span>
-                    <span className="badge">
-                        Rate: <strong>{reversalCount < 4 ? '1.0' : '0.5'} dB/s</strong>
-                    </span>
-                    <span className="badge" style={{ background: '#334155', border: '1px solid #475569' }}>
-                        eANL: <strong>{currentEANL !== null ? currentEANL : '--'} dB</strong>
-                    </span>
-                    <span className="badge" style={{ background: '#334155', border: '1px solid #475569', opacity: currentAANL ? 1 : 0.5 }}>
-                        aANL: <strong>{currentAANL !== null ? currentAANL : '--'} dB</strong>
-                    </span>
-                </div>
+
+                {/* Dashboard View */}
+                <ReliabilityDashboard
+                    history={history}
+                    speechLevel={speechLevel}
+                    eHANT={currentEANL !== null ? parseFloat(currentEANL) : null}
+                    aHANT={currentAANL !== null ? parseFloat(currentAANL) : null}
+                    sd={currentSD !== null ? parseFloat(currentSD) : null}
+                />
             </div>
 
-            <div className="graph-container">
-                <TestGraph history={history} speechLevel={speechLevel} />
-            </div>
+            {/* Render Graph only if not in dashboard (redundant here as dashboard has it, removed standalone graph) */}
 
             {isPlaying ? (
                 <div className="controls-active">
