@@ -114,26 +114,27 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
 
   // Helper to calculate score
   const calculateScore = (data) => {
-    if (!data) return { anl: 0, probability: '', color: '' };
-    const anl = data.mcl - data.bnl;
-    let probability = "";
+    if (!data) return { anl: 0, color: '' };
+    const anl = data.bnl - data.mcl;
+    // Probability text removed as per user request. 
+    // Defined boundaries for color coding only:
+    // High Probability (>= -7) -> Green
+    // Moderate Probability (>= -13) -> Yellow
+    // Low Probability (< -13) -> Red
     let color = "";
 
-    if (anl <= 7) {
-      probability = "High Probability (85%+) of Successful Hearing Aid Use";
+    if (anl >= -7) {
       color = "#4ade80"; // Green
-    } else if (anl <= 13) {
-      probability = "Moderate Probability of Successful Hearing Aid Use";
+    } else if (anl >= -13) {
       color = "#facc15"; // Yellow
     } else {
-      probability = "Low Probability of Successful Hearing Aid Use";
       color = "#f87171"; // Red
     }
-    return { anl, probability, color };
+    return { anl, color };
   };
 
   const renderCard = (label, data) => {
-    const { anl, probability, color } = calculateScore(data);
+    const { anl, color } = calculateScore(data);
     return (
       <div className="result-card" style={{ flex: 1, minWidth: '300px', padding: '1.5rem', background: '#1e293b', borderRadius: '12px', border: '1px solid #334155' }}>
         <h3 style={{ marginTop: 0, borderBottom: '1px solid #475569', paddingBottom: '0.5rem', marginBottom: '1rem' }}>{label}</h3>
@@ -144,7 +145,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
             <span className="value">{data.mcl} dB</span>
           </div>
           <div className="score-item">
-            <span className="label">BNL</span>
+            <span className="label">Noise Level</span>
             <span className="value">{data.bnl} dB</span>
           </div>
           {data.avgExcursion !== undefined && (
@@ -160,12 +161,12 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
           {data.score && data.validity && (
             <>
               <div className="score-item" style={{ borderLeft: '1px solid #475569', paddingLeft: '1rem' }}>
-                <span className="label" title="Estimated ANL (Last Level)">eANL</span>
+                <span className="label" title="Estimated HANT (Last Level)">eHANT</span>
                 <span className="value">{data.score.eANL} dB</span>
               </div>
               <div className="score-item">
-                <span className="label" title="Average ANL (Reversals)">aANL</span>
-                <span className="value">{data.validity.aANL !== null ? data.validity.aANL + ' dB' : 'N/A'}</span>
+                <span className="label" title="Average HANT (Reversals)">aHANT</span>
+                <span className="value">{data.validity.aANL !== null && data.validity.aANL !== undefined ? Number(data.validity.aANL).toFixed(1) + ' dB' : 'N/A'}</span>
               </div>
             </>
           )}
@@ -186,7 +187,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
         </div>
 
         <div className="final-score" style={{ borderColor: color, padding: '1.5rem 1rem' }}>
-          <span className="anl-label">ANL Score</span>
+          <span className="anl-label">HANT Score</span>
           <span className="anl-value" style={{ color: color, fontSize: '3rem' }}>{anl} dB</span>
         </div>
 
@@ -196,7 +197,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
           </div>
         )}
 
-        <p className="probability" style={{ fontSize: '1rem' }}>{probability}</p>
+
 
         {data.validity && data.validity.reliability_status && (
           <div style={{ marginTop: '1rem', paddingTop: '0.5rem', borderTop: '1px solid #334155', fontSize: '0.85rem' }}>
@@ -268,13 +269,18 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
     const abs = Math.abs(diff);
     if (abs < 3) return { text: "No Significant Change", color: "#94a3b8" }; // Grey
 
-    // For ANL, Negative difference is Improvement (Lower score).
-    const direction = diff < 0 ? "Improvement" : "Decline";
+    // For HANT (Noise - Speech), Positive difference (Higher B than A) is Improvement.
+    // Wait, let's trace:
+    // HANT = Noise - Speech.
+    // Higher Noise tolerance = Higher HANT Score.
+    // Gain = Score B - Score A.
+    // If B > A, diff > 0. This is Improvement.
+    const direction = diff > 0 ? "Improvement" : "Decline";
     const significance = abs >= 4 ? "Significant" : "Likely";
     const confidence = abs >= 4 ? "95% Confidence" : "80% Confidence";
 
-    // Green for improvement (negative diff), Red for decline
-    const color = diff < 0 ? "#4ade80" : "#f87171";
+    // Green for improvement (positive diff), Red for decline
+    const color = diff > 0 ? "#4ade80" : "#f87171";
 
     return { text: `${significance} ${direction} (${confidence})`, color };
   };
@@ -285,7 +291,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
       <div ref={reportRef} style={{ padding: '2rem', background: '#0f172a', borderRadius: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #334155', paddingBottom: '1rem' }}>
-          <h2 style={{ margin: 0 }}>ANL Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.28</span></h2>
+          <h2 style={{ margin: 0 }}>Hearing Aid Noise Tolerance Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.30</span></h2>
           <div style={{ textAlign: 'right', fontSize: '0.9rem', color: '#94a3b8' }}>
             <div>Patient: <strong style={{ color: '#fff' }}>{patientName || "N/A"}</strong></div>
             <div>Date: {testDate || new Date().toLocaleDateString()}</div>
@@ -302,7 +308,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
         <div className="card summary-card" style={{ textAlign: 'center', maxWidth: '600px', margin: '0 auto', background: '#1e293b' }}>
           <h3>Outcome</h3>
           <p style={{ fontSize: '1.2rem' }}>
-            Benefit in ANL (Test B - Test A): <strong style={{ color: interpretation.color }}>{improvement > 0 ? '+' : ''}{improvement} dB</strong>
+            Benefit in HANT (Test B - Test A): <strong style={{ color: interpretation.color }}>{improvement > 0 ? '+' : ''}{improvement} dB</strong>
           </p>
           <p style={{ fontSize: '1.1rem', fontWeight: 600, color: interpretation.color, marginTop: '-0.5rem' }}>
             {interpretation.text}
@@ -340,7 +346,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
           })()}
 
           <p style={{ color: '#ccc', fontStyle: 'italic', fontSize: '0.9rem', marginTop: '1rem' }}>
-            (Lower ANL scores indicate better acceptance of background noise)<br />
+            (Higher HANT scores indicate better acceptance of background noise)<br />
           </p>
         </div>
 

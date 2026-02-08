@@ -34,7 +34,7 @@ export const calculateSignificance = (resultA, resultB) => {
         const isSig80 = diff > criticalDifference80;
 
         const rawDiff = scoreB - scoreA;
-        const isImprovement = rawDiff < 0; // Lower ANL is better
+        const isImprovement = rawDiff > 0; // Higher HANT is better
 
         let status = "None";
         let message = "No Significant Difference";

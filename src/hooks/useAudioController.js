@@ -81,6 +81,10 @@ export const useAudioController = (speechUrl, noiseUrl, initialNoiseOffset = 0) 
     const speechGain = audioContextRef.current.createGain();
     const noiseGain = audioContextRef.current.createGain();
 
+    // Initialize to silence to prevent "blast" at start
+    speechGain.gain.value = 0;
+    noiseGain.gain.value = 0;
+
     speechGainNodeRef.current = speechGain;
     noiseGainNodeRef.current = noiseGain;
 
@@ -105,15 +109,15 @@ export const useAudioController = (speechUrl, noiseUrl, initialNoiseOffset = 0) 
     const merger = audioContextRef.current.createChannelMerger(2);
 
     if (swapChannels) {
-      // Speech -> Right (1)
-      // Noise -> Left (0)
-      speechGain.connect(merger, 0, 1);
-      if (noiseSource) noiseGain.connect(merger, 0, 0);
-    } else {
-      // Speech -> Left (0)
+      // Swapped: Speech -> Left (0)
       // Noise -> Right (1)
       speechGain.connect(merger, 0, 0);
       if (noiseSource) noiseGain.connect(merger, 0, 1);
+    } else {
+      // Normal: Speech -> Right (1)
+      // Noise -> Left (0)
+      speechGain.connect(merger, 0, 1);
+      if (noiseSource) noiseGain.connect(merger, 0, 0);
     }
 
     merger.connect(audioContextRef.current.destination);

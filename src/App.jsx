@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import { useAudioController } from './hooks/useAudioController';
-import TestPhase from './components/TestPhase';
+
 import Calibration from './components/Calibration';
 import Results from './components/Results';
 import AutoTrackingPhase from './components/AutoTrackingPhase';
@@ -19,7 +19,7 @@ function App() {
   const [resultsA, setResultsA] = useState(null); // { mcl, bnl }
   const [resultsB, setResultsB] = useState(null); // { mcl, bnl }
   const [activeTestId, setActiveTestId] = useState('A'); // 'A' or 'B'
-  const [testMode, setTestMode] = useState('auto'); // 'manual' or 'auto'
+
   const [autoSpeechLevel, setAutoSpeechLevel] = useState(75); // Fixed at 75 dB for Auto Mode
 
   // Clinic Settings
@@ -30,9 +30,16 @@ function App() {
     licenseNumber: ''
   });
 
-  // Current Active Values
-  const [mcl, setMcl] = useState(null);
-  const [bnl, setBnl] = useState(null);
+
+
+  // Speech Options
+  const speechOptions = [
+    { value: 'audio/history_glass.flac', label: 'History of Glass' },
+    { value: 'audio/history_bicycle.flac', label: 'History of the Bicycle' },
+    { value: 'audio/history_pencil.flac', label: 'History of the Pencil' },
+    { value: 'audio/history_umbrella.flac', label: 'History of the Umbrella' }
+  ];
+  const [speechFile, setSpeechFile] = useState(speechOptions[0].value); // Default to first new option
 
   // Main Audio Controller
   // We initialize it here so it persists across MCL and BNL phases
@@ -44,7 +51,7 @@ function App() {
     setNoiseVolume,
     swapChannels,
     toggleSwapChannels
-  } = useAudioController('audio/anl_speech.flac', 'audio/anl_noise.flac', 0); // Offset 0 to match MCL range
+  } = useAudioController(speechFile, 'audio/4-talker_babble.flac', 0); // Offset 0 to match MCL range
 
   // Helper to get current label
   const currentLabel = activeTestId === 'A' ? labelA : labelB;
@@ -107,46 +114,18 @@ function App() {
     event.target.value = null;
   };
 
-  // When entering MCL phase, ensure noise is muted and speech is audible
   useEffect(() => {
-    if (phase === 'mcl' && isReady) {
-      setSpeechVolume((mcl !== null ? mcl : 50) - 95); // Start at comfortable level (50dB Display -> -45dB Audio)
-      setNoiseVolume(-100); // Mute noise
-    } else if (phase === 'bnl' && isReady) {
-      // Keep speech at MCL
-      setSpeechVolume(mcl - 95);
-      // Start noise low (e.g. 25dB Display -> -70dB Audio)
-      setNoiseVolume(25 - 95);
-    } else if (phase === 'results') {
+    if (phase === 'results') {
       stop();
     }
-  }, [phase, isReady, play, stop, setSpeechVolume, setNoiseVolume, mcl]);
+  }, [phase, stop]);
 
-  const handleMclConfirm = () => {
-    setPhase('bnl');
-  };
 
-  const handleBnlConfirm = () => {
-    // Save results for the active test
-    const resultData = { mcl, bnl };
-    if (activeTestId === 'A') {
-      setResultsA(resultData);
-    } else {
-      setResultsB(resultData);
-    }
-    setPhase('results');
-  };
 
   const startTestB = () => {
     setActiveTestId('B');
-    setMcl(null);
-    setBnl(null);
     // Skip calibration check for Test B as requested
-    if (testMode === 'auto') {
-      setPhase('auto_test');
-    } else {
-      setPhase('mcl');
-    }
+    setPhase('auto_test');
   };
 
   const startCalibration = () => {
@@ -154,16 +133,10 @@ function App() {
   };
 
   const skipCalibration = () => {
-    if (testMode === 'auto') {
-      setPhase('auto_test');
-    } else {
-      setPhase('mcl');
-    }
+    setPhase('auto_test');
   };
 
   const restartFull = () => {
-    setMcl(null);
-    setBnl(null);
     setResultsA(null);
     setResultsB(null);
     setActiveTestId('A');
@@ -172,9 +145,13 @@ function App() {
     // Let's keep it for now.
   };
 
+  const handleStartOver = () => {
+    if (window.confirm("Are you sure you want to start over? This will reset the current test.")) {
+      restartFull();
+    }
+  };
+
   const restartTest = (testId) => {
-    setMcl(null);
-    setBnl(null);
     if (testId === 'A') {
       setResultsA(null);
       setActiveTestId('A');
@@ -190,7 +167,7 @@ function App() {
     <div className="app-container">
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h1>ANL Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.28</span></h1>
+          <h1>Hearing Aid Noise Tolerance Test <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.30</span></h1>
           {patientName && (
             <div className="patient-badge" style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#64748b' }}>
               Patient: <strong style={{ color: '#fff' }}>{patientName}</strong>
@@ -203,6 +180,15 @@ function App() {
           )}
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          {phase !== 'intro' && (
+            <button
+              onClick={handleStartOver}
+              className="secondary-btn"
+              style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', borderColor: '#ef4444', color: '#ef4444' }}
+            >
+              Start Over
+            </button>
+          )}
           <button
             onClick={() => setIsSettingsOpen(true)}
             title="Clinic Settings"
@@ -232,7 +218,7 @@ function App() {
         {phase === 'intro' && (
           <div className="card intro-card">
             <h2>Welcome</h2>
-            <p>This application administers the Acceptable Noise Level (ANL) test.</p>
+            <p>This application administers the Hearing Aid Noise Tolerance Test (formerly ANL).</p>
 
             <div className="input-group" style={{ margin: '2rem 0', textAlign: 'left' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8' }}>Patient Name / ID</label>
@@ -272,25 +258,28 @@ function App() {
                 style={{ width: '100%', padding: '0.8rem', borderRadius: '6px', border: '1px solid #475569', background: '#1e293b', color: 'white', marginBottom: '1.5rem' }}
               />
 
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8' }}>Mode</label>
+
+
+              <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', marginTop: '1.5rem' }}>Speech Passage</label>
               <select
-                value={testMode}
-                onChange={(e) => setTestMode(e.target.value)}
+                value={speechFile}
+                onChange={(e) => setSpeechFile(e.target.value)}
                 className="text-input"
                 style={{ width: '100%', padding: '0.8rem', borderRadius: '6px', border: '1px solid #475569', background: '#1e293b', color: 'white' }}
               >
-                <option value="manual">Manual (Standard)</option>
-                <option value="auto">Automatic (1 dB/sec)</option>
+                {speechOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
               </select>
 
-              {testMode === 'auto' && (
-                <div style={{ marginTop: '1rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8' }}>Fixed Speech Level</label>
-                  <div style={{ padding: '0.5rem', background: '#334155', borderRadius: '4px', color: '#cbd5e1', display: 'inline-block' }}>
-                    75 dB
-                  </div>
+              <div style={{ marginTop: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8' }}>Fixed Speech Level</label>
+                <div style={{ padding: '0.5rem', background: '#334155', borderRadius: '4px', color: '#cbd5e1', display: 'inline-block' }}>
+                  75 dB
                 </div>
-              )}
+              </div>
             </div>
 
             <div className="data-controls" style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
@@ -326,11 +315,7 @@ function App() {
           <div className="calibration-wrapper">
             <Calibration
               onComplete={() => {
-                if (testMode === 'auto') {
-                  setPhase('auto_test');
-                } else {
-                  setPhase('mcl');
-                }
+                setPhase('auto_test');
               }}
               onBack={() => setPhase('intro')}
             />
@@ -340,81 +325,19 @@ function App() {
               <p>If you cannot hear audio or it sounds wrong, try swapping channels.</p>
               <div className="control-row">
                 <label>
-                  Current Mode: <strong>{swapChannels ? "Swapped (Left=Noise, Right=Speech)" : "Normal (Left=Speech, Right=Noise)"}</strong>
+                  Current Mode: <strong>{swapChannels ? "Swapped (Left=Speech, Right=Noise)" : "Normal (Right=Speech, Left=Noise)"}</strong>
                 </label> <br />
                 <button onClick={toggleSwapChannels} className="secondary-btn" style={{ marginTop: '0.5rem' }}>
                   Swap L/R Channels
                 </button>
               </div>
               <div style={{ marginTop: '1rem' }}>
-                <button onClick={() => { play(); setSpeechVolume(-10); setNoiseVolume(-100); }} style={{ marginRight: '10px' }}>Test Speech</button>
-                <button onClick={() => { play(); setSpeechVolume(-100); setNoiseVolume(-10); }} style={{ marginRight: '10px' }}>Test Noise</button>
+                <button onClick={() => { play(); setSpeechVolume(-25); setNoiseVolume(-100); }} style={{ marginRight: '10px' }}>Test Speech</button>
+                <button onClick={() => { play(); setSpeechVolume(-100); setNoiseVolume(-25); }} style={{ marginRight: '10px' }}>Test Noise</button>
                 <button onClick={stop}>Stop Audio</button>
               </div>
             </div>
           </div>
-        )}
-
-        {phase === 'mcl' && (
-          <div>
-            {!isReady ? (
-              <div className="loading">Loading Test Audio...</div>
-            ) : (
-              <TestPhase
-                title={`MCL - ${currentLabel}`}
-                instruction="Adjust the speech volume until it is at your most comfortable listening level."
-                value={mcl === null ? 50 : mcl}
-                minVal={25}
-                maxVal={100}
-                onChange={(val) => {
-                  setMcl(val);
-                  // Map Display dB (25-100) to WebAudio dB (-70 to +5)
-                  // Offset is -95dB. 100 - 95 = +5dB (Max). 25 - 95 = -70dB (Min).
-                  setSpeechVolume(val - 95);
-                }}
-                onConfirm={handleMclConfirm}
-                onBack={() => {
-                  stop(); // Stop audio when going back to calibration
-                  setPhase('calibration');
-                }}
-                onPlay={() => {
-                  play();
-                  // RE-APPLY Volumes because play() creates new GainNodes with 1.0 (Loud) gain.
-                  // This ensures we resume at the user's selected comfort level.
-                  const speechLevel = (mcl !== null ? mcl : 50) - 95;
-                  setSpeechVolume(speechLevel);
-                  setNoiseVolume(-100);
-                }}
-                onStop={stop}
-              />
-            )}
-          </div>
-        )}
-
-        {phase === 'bnl' && (
-          <TestPhase
-            title={`BNL - ${currentLabel}`}
-            instruction="Adjust the background noise to the MAXIMUM level you would be willing to 'put up with' while listening to the story."
-            value={bnl === null ? 25 : bnl}
-            minVal={25}
-            maxVal={100}
-            onChange={(val) => {
-              setBnl(val);
-              // Map Display dB (25-100) to WebAudio dB (-70 to +5)
-              setNoiseVolume(val - 95);
-            }}
-            onConfirm={handleBnlConfirm}
-            onBack={() => setPhase('mcl')}
-            isAuto={testMode === 'auto'}
-            onPlay={() => {
-              play();
-              // Keep speech at MCL
-              setSpeechVolume((mcl !== null ? mcl : 50) - 95);
-              // Noise is at current BNL
-              setNoiseVolume((bnl !== null ? bnl : 25) - 95);
-            }}
-            onStop={stop}
-          />
         )}
 
         {phase === 'auto_test' && (

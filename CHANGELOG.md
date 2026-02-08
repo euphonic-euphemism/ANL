@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.0.30] - 2026-02-08
+### Changed
+- **Audio Normalization**: Updated audio normalization for 4-talker babble and history speech files to -23.0 dB RMS for precise 0 dB SNR accuracy.
+- **Terminology**: Renamed "EHANT" / "AHANT" to "eHANT" / "aHANT" in the dashboard for better readability.
+- **File Renaming**: Renamed `anl_noise.flac` to `4-talker_babble.flac`.
+
+## [1.0.29] - 2026-02-07
+### Added
+- **Reliability Dashboard**: New real-time dashboard for the Automatic Test.
+- **Consistency Score**: Measures patient tracking stability using Standard Deviation of Excursion Widths.
+- **Reliability Status**: Color-coded indicators for eHANT vs aHANT difference.
+- **aHANT Calculation**: Improved averaging logic to exclude the first 30 seconds of data.
+
+
+## [1.0.28] - 2026-02-02
+### Fixed
+- **Statistical Significance Direction**: Fixed a critical logic bug where "Decline" (worse performance) was incorrectly labeled as "Improvement". The system now correctly distinguishes between positive (Decline) and negative (Improvement) score differences.
+- **Crash Fix**: Resolved a reference error in the statistics module that could cause the app to crash when calculating non-significant results.
+
+### Changed
+- **Streamlined Workflow**: Removed the intermediate calibration prompt ("Do you need to re-calibrate?") between Test A and Test B. The test now proceeds directly to the Test B tracking phase for a smoother user experience.
+
 ## [1.0.27] - 2026-02-01
 ### Added
 - **Test Timer**: A persistent stopwatch in the header to track session duration.

@@ -22,7 +22,11 @@ def calculate_rms(file_path):
 
 files = [
     'public/audio/anl_speech.flac',
-    'public/audio/anl_noise.flac',
+    'public/audio/4-talker_babble.flac',
+    'public/audio/history_glass.flac',
+    'public/audio/history_bicycle.flac',
+    'public/audio/history_pencil.flac',
+    'public/audio/history_umbrella.flac',
     'public/audio/cal_pulse_R.flac' # using Right channel which is Tone in standard mode often
 ]
 
