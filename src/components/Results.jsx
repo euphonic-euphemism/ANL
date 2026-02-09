@@ -199,16 +199,22 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
 
 
 
-        {data.validity && data.validity.reliability_status && (
+        {data.validity && (data.validity.stability_status || data.validity.reliability_status) && (
           <div style={{ marginTop: '1rem', paddingTop: '0.5rem', borderTop: '1px solid #334155', fontSize: '0.85rem' }}>
-            <span style={{ color: '#94a3b8' }}>Reliability: </span>
+            <span style={{ color: '#94a3b8' }}>{data.validity.stability_status ? 'Stability:' : 'Reliability:'} </span>
             <strong style={{
-              color: data.validity.reliability_status === 'High' ? '#4ade80' :
-                data.validity.reliability_status === 'Medium' ? '#facc15' : '#f87171'
+              color: (data.validity.stability_status || data.validity.reliability_status).includes('High') ? '#4ade80' :
+                (data.validity.stability_status || data.validity.reliability_status).includes('Moderate') ? '#facc15' : '#f87171'
             }}>
-              {data.validity.reliability_status}
+              {data.validity.stability_status || data.validity.reliability_status}
             </strong>
-            {data.validity.reliability_diff !== null && <span style={{ color: '#64748b', marginLeft: '0.5rem' }}>(Diff: {data.validity.reliability_diff} dB)</span>}
+            {data.validity.stability_sd !== undefined && (
+              <span style={{ color: '#64748b', marginLeft: '0.5rem' }}>(SD: {data.validity.stability_sd} dB)</span>
+            )}
+            {/* Fallback for legacy data */}
+            {!data.validity.stability_status && data.validity.reliability_diff !== null && (
+              <span style={{ color: '#64748b', marginLeft: '0.5rem' }}>(Diff: {data.validity.reliability_diff} dB)</span>
+            )}
           </div>
         )}
       </div>
@@ -291,7 +297,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
       <div ref={reportRef} style={{ padding: '2rem', background: '#0f172a', borderRadius: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #334155', paddingBottom: '1rem' }}>
-          <h2 style={{ margin: 0 }}>Hearing Aid Noise Tolerance Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.30</span></h2>
+          <h2 style={{ margin: 0 }}>Hearing Aid Noise Tolerance Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.31</span></h2>
           <div style={{ textAlign: 'right', fontSize: '0.9rem', color: '#94a3b8' }}>
             <div>Patient: <strong style={{ color: '#fff' }}>{patientName || "N/A"}</strong></div>
             <div>Date: {testDate || new Date().toLocaleDateString()}</div>

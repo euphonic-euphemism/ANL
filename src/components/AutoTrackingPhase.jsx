@@ -114,46 +114,40 @@ const AutoTrackingPhase = ({
         return { eANL, aANL };
     };
 
-    // New Helper: Calculate Mean Excursion Width (MEW)
-    // Input: Array of {x, y} reversal points
-    const calculateMeanExcursionWidth = (reversalPoints) => {
-        if (reversalPoints.length < 2) return 0; // Need at least 2 points to have a width
 
-        let sumWidths = 0;
+
+    // New Helper: Calculate Average Excursion Height (dB)
+    // Input: Array of {x, y} reversal points (peaks and valleys)
+    const calculateAverageExcursionHeight = (reversalPoints) => {
+        if (reversalPoints.length < 2) return 0; // Need at least 2 points to have a height diff
+
+        let sumHeights = 0;
         let count = 0;
 
         for (let i = 1; i < reversalPoints.length; i++) {
             // Absolute difference between current reversal Y (dB) and previous reversal Y (dB)
-            const width = Math.abs(reversalPoints[i].y - reversalPoints[i - 1].y);
-            sumWidths += width;
+            const height = Math.abs(reversalPoints[i].y - reversalPoints[i - 1].y);
+            sumHeights += height;
             count++;
         }
 
-        return count > 0 ? sumWidths / count : 0;
+        return count > 0 ? sumHeights / count : 0;
     };
 
-    // New Helper: Calculate Excursion Stats (Mean Width & Standard Deviation)
-    // Updated to accept {x,y} objects if available, or fall back to array of numbers
-    const calculateExcursionStats = (reversals) => {
-        // Handle both array of numbers (legacy) and array of objects {x,y}
-        const isObjectArray = reversals.length > 0 && typeof reversals[0] === 'object';
-        const values = isObjectArray ? reversals.map(r => r.y) : reversals;
+    // New Helper: Calculate Stability SD (Standard Deviation of Noise Levels in Last 30s)
+    const calculateStabilitySD = (history, duration) => {
+        // Filter for points in the last 30 seconds
+        const startTime = Math.max(0, duration - 30);
+        const lateData = history.filter(pt => pt.t >= startTime);
 
-        if (values.length < 4) return { meanWidth: 0, sdWidth: 0 };
+        if (lateData.length < 2) return 0; // Need at least 2 points for SD
 
-        const widths = [];
-        for (let i = 1; i < values.length; i++) {
-            widths.push(Math.abs(values[i] - values[i - 1]));
-        }
+        const values = lateData.map(pt => pt.noise);
+        const n = values.length;
+        const mean = values.reduce((a, b) => a + b, 0) / n;
+        const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (n - 1);
 
-        if (widths.length === 0) return { meanWidth: 0, sdWidth: 0 };
-
-        const n = widths.length;
-        const meanWidth = widths.reduce((a, b) => a + b, 0) / n;
-        const variance = widths.reduce((a, b) => a + Math.pow(b - meanWidth, 2), 0) / (n > 1 ? n - 1 : 1);
-        const sdWidth = Math.sqrt(variance);
-
-        return { meanWidth, sdWidth };
+        return Math.sqrt(variance);
     };
 
     // Generate Final Results (Hybrid ANL/TNT Logic - Updated eHANT)
@@ -163,6 +157,7 @@ const AutoTrackingPhase = ({
         const reversalPoints = identifyReversalPoints(history, 30);
 
         const finalPoint = history.length > 0 ? history[history.length - 1] : { t: 0, noise: speechLevel - 10 };
+        const durationSeconds = finalPoint ? parseFloat(finalPoint.t.toFixed(1)) : 0;
 
         let eBNL;
         if (reversalPoints.length > 0) {
@@ -227,7 +222,7 @@ const AutoTrackingPhase = ({
 
         // Calculate Stats for Validity (Standard Error & CI)
         let finalStats = { se: 0, ci95: 0, stdDev: 0 };
-        let excursionStats = { meanWidth: 0, sdWidth: 0 };
+        // let excursionStats = { meanWidth: 0, sdWidth: 0 }; // Removed sdWidth check
 
         if (reversals.length >= 4) {
             const validReversals = reversals.slice(3); // Drop first 3
@@ -241,32 +236,47 @@ const AutoTrackingPhase = ({
 
                 finalStats = { se, ci95, stdDev };
 
-                // Calculate Excursion Stats (Guessing Detection)
-                // Pass the new reversalPoints array (which contains {x,y})
-                excursionStats = calculateExcursionStats(reversalPoints);
+
+                // Calculate Excursion Stats (Guessing Detection) - OLD Logic Removed
+                // excursionStats = calculateExcursionStats(reversalPoints); 
             }
         }
 
-        let reliability_status = "Unknown/Insufficient Data";
-        let reliability_diff = null;
+        // --- Tracking Stability Logic (Updated 2026-02-08) ---
+        // Uses SD of noise levels in the last 30 seconds
+        const stability_sd = calculateStabilitySD(history, durationSeconds);
+        const stability_sd_formatted = parseFloat(stability_sd.toFixed(2));
 
-        if (aANL !== null) {
-            const diff = Math.abs(eANL - aANL);
-            reliability_diff = parseFloat(diff.toFixed(1));
+        let stability_status = "Unknown";
 
-            if (diff <= 2.0) {
-                reliability_status = "High";
-            } else if (diff <= 5.0) { // Updated from 4.0 to 5.0
-                reliability_status = "Moderate";
+        if (durationSeconds >= 30) {
+            if (stability_sd <= 2.0) {
+                stability_status = "High";
+            } else if (stability_sd <= 4.0) {
+                stability_status = "Moderate";
             } else {
-                reliability_status = "Low";
+                stability_status = "Low";
             }
-
-            // Check for Guessing (High Excursion Deviation)
-            if (excursionStats.sdWidth > 4.0) {
-                reliability_status += " (Possible Guessing)";
+            // Append context if Low Stability due to high drift
+            if (stability_status === "Low") {
+                stability_status += " (Erratic/Drifting)";
             }
+        } else {
+            stability_status = "Insufficient Data (<30s)";
         }
+
+        // --- Guessing Logic (Updated 2026-02-08) ---
+        // Uses Average Excursion Height > 5.0 dB
+        const avgExcursionHeight = calculateAverageExcursionHeight(reversalPoints);
+
+        // Check for Guessing (Average Excursion Height > 5.0 dB)
+        // Only trigger if we have enough data (stability status is not insufficient)
+        if (durationSeconds >= 30 && avgExcursionHeight > 5.0) {
+            stability_status += " (Possible Guessing)";
+        }
+
+        // Legacy "Reliability" mapped to new Stability for backward compatibility if needed, 
+        // but we are fully replacing it in the UI.
 
         return {
             score: {
@@ -278,15 +288,21 @@ const AutoTrackingPhase = ({
                 aBNL: aBNL,
                 se: parseFloat(finalStats.se.toFixed(2)),
                 ci95: parseFloat(finalStats.ci95.toFixed(2)),
-                reliability_status,
-                reliability_diff,
+                stability_status, // New Key
+                stability_sd: stability_sd_formatted, // New Key
+                avg_excursion_height: parseFloat(avgExcursionHeight.toFixed(1)), // New Metric
+
+                // Deprecated keys for backward compat (mapped to new values where appropriate or null)
+                reliability_status: stability_status,
+                reliability_diff: stability_sd_formatted, // Overloaded for now, or just null it? Better to keep semantic meaning clear.
+
                 stabilization_status,
-                excursion_sd: parseFloat(excursionStats.sdWidth.toFixed(2)) // Export for debugging/display
+                // excursion_sd removed
             },
             meta: {
                 speech_level: speechLevel,
                 reversal_count: reversals.length,
-                duration_seconds: finalPoint ? parseFloat(finalPoint.t.toFixed(1)) : 0,
+                duration_seconds: durationSeconds,
                 stabilization_seconds: stabilization_seconds !== null ? parseFloat(stabilization_seconds.toFixed(1)) : null
             }
         };
@@ -494,16 +510,11 @@ const AutoTrackingPhase = ({
                     // Calculate Excursion Stats for live dashboard
                     // Filter reversals for those after 30s to match MEW logic if possible, 
                     // but for live stability we might want all. 
-                    // Let's use the same logic as final results: ignore first 30s
-                    // However, validReversals in final logic uses index slicing (dropping first 3). 
-                    // Let's stick to the IdentifyReversalPoints logic for consistency.
-                    // Accessing history here is expensive (state). 
-                    // Better to use stateRef.current.reversalLevels but that is just Y values. 
-                    // Wait, identifyReversalPoints needs history (time). 
-                    // Let's compromise: Use existing `stateRef.current.reversalLevels` for a rough SD check 
-                    // or just calculate it from the `reversalLevels` array we already track.
-
-                    const liveExcursionStats = calculateExcursionStats(stateRef.current.reversalLevels);
+                    // Let's use the same logic as final results: ignore first 30s?
+                    // For live feedback, showing immediate excursion height is better.
+                    // Adapt reversalLevels (array of numbers) to format expected by helper (array of {y: val})
+                    const reversalsAsObjects = stateRef.current.reversalLevels.map(val => ({ y: val }));
+                    const liveAvgHeight = calculateAverageExcursionHeight(reversalsAsObjects);
 
                     const metrics = calculateLiveMetrics(
                         newNoise,
@@ -514,7 +525,7 @@ const AutoTrackingPhase = ({
                     );
                     setCurrentEANL(metrics.eANL.toFixed(1));
                     setCurrentAANL(metrics.aANL !== null ? metrics.aANL.toFixed(1) : null);
-                    setCurrentSD(liveExcursionStats.sdWidth.toFixed(1));
+                    setCurrentSD(liveAvgHeight.toFixed(1)); // Passing Avg Height as 'sd' prop for now
 
                     setNoiseVolume(newNoise - 95);
 

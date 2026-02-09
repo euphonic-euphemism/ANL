@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.31] - 2026-02-08
+### Changed
+- **Tracking Stability**: Replaced "Reliability Status" with "Tracking Stability".
+- **Guessing Logic**: Implemented "Possible Guessing" detection based on Average Excursion Height (> 5.0 dB).
+- **Dashboard**: Updated Reliability Dashboard to display Stability Status, SD (Noise Level), and Avg Excursion Height.
+- **Results**: Updated Final Report to reflect new Stability metrics.
+
 ## [1.0.30] - 2026-02-08
 ### Changed
 - **Audio Normalization**: Updated audio normalization for 4-talker babble and history speech files to -23.0 dB RMS for precise 0 dB SNR accuracy.
