@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.32] - 2026-02-09
+### Fixed
+- **Tracking Stability Display**: Fixed an issue where "Tracking Stability" would stay on "Waiting..." indefinitely. It now correctly updates after 30 seconds of testing.
+- **Audio Responsiveness**: Improved noise volume responsiveness by reducing the gain time constant to 0.05s, making audible changes instantaneous.
+
+### Added
+- **Speech Passage Selection**: Added a dropdown menu to select a different speech passage before starting Test B.
+
 ## [1.0.31] - 2026-02-08
 ### Changed
 - **Tracking Stability**: Replaced "Reliability Status" with "Tracking Stability".

@@ -97,7 +97,8 @@ const AutoTrackingPhase = ({
 
     const [currentEANL, setCurrentEANL] = useState(null);
     const [currentAANL, setCurrentAANL] = useState(null);
-    const [currentSD, setCurrentSD] = useState(null); // New state for live SD
+    const [currentSD, setCurrentSD] = useState(null); // Used for Avg Excursion Height
+    const [currentStabilitySD, setCurrentStabilitySD] = useState(null); // Used for Tracking Stability
 
     // Helper: Calculate Metrics from current state
     const calculateLiveMetrics = (currentNoise, reversalLevels, speechLvl, sumNoiseAfter30, countNoiseAfter30) => {
@@ -505,11 +506,11 @@ const AutoTrackingPhase = ({
                     newNoise = Math.max(0, Math.min(100, newNoise));
 
                     stateRef.current.noiseLevel = newNoise;
-                    setNoiseLevel(newNoise);
+                    setNoiseVolume(newNoise - 95);
 
                     // Calculate Excursion Stats for live dashboard
-                    // Filter reversals for those after 30s to match MEW logic if possible, 
-                    // but for live stability we might want all. 
+                    // Filter reversals for those after 30s to match MEW logic if possible,
+                    // but for live stability we might want all.
                     // Let's use the same logic as final results: ignore first 30s?
                     // For live feedback, showing immediate excursion height is better.
                     // Adapt reversalLevels (array of numbers) to format expected by helper (array of {y: val})
@@ -527,9 +528,11 @@ const AutoTrackingPhase = ({
                     setCurrentAANL(metrics.aANL !== null ? metrics.aANL.toFixed(1) : null);
                     setCurrentSD(liveAvgHeight.toFixed(1)); // Passing Avg Height as 'sd' prop for now
 
-                    setNoiseVolume(newNoise - 95);
-
                     const t = (now - startTime) / 1000;
+
+                    // Live Stability Calculation (Last 30s)
+                    const liveStabilitySD = calculateStabilitySD(stateRef.current.historyForStability || [], t);
+                    setCurrentStabilitySD(liveStabilitySD.toFixed(2));
 
                     // Update Running Average for aHANT
                     if (t > 30) {
@@ -537,8 +540,19 @@ const AutoTrackingPhase = ({
                         stateRef.current.countNoiseAfter30++;
                     }
 
+                    // Maintain a parallel history in ref for synchronous access if needed, 
+                    // though for this specific calculation we might just need the previous frame's history + current point.
+                    // Let's attach the new point to the history we pass to setHistory.
+                    const newPoint = { t, noise: newNoise };
+                    // Optimization: We can store the full history in ref if performance allows, or just depend on setHistory callback.
+                    // But for live calculation in THIS frame, we need the history including this point.
+
+                    // Let's use a ref for history to avoid dependency on the async state update for the math
+                    if (!stateRef.current.historyForStability) stateRef.current.historyForStability = [];
+                    stateRef.current.historyForStability.push(newPoint);
+
                     setHistory(prev => {
-                        const newHistory = [...prev, { t, noise: newNoise }];
+                        const newHistory = [...prev, newPoint];
 
                         if (t >= 120) { // Timeout at 2 min
                             // Force stop loop logic by checking if we are already finishing
@@ -591,7 +605,9 @@ const AutoTrackingPhase = ({
             stats: { slope: 0, stdDev: 0, mean: 0 },
             isFinishing: false,
             sumNoiseAfter30: 0,
-            countNoiseAfter30: 0
+            sumNoiseAfter30: 0,
+            countNoiseAfter30: 0,
+            historyForStability: [{ t: 0, noise: startLevel }]
         };
         setNoiseLevel(startLevel);
         setReversalCount(0);
@@ -623,6 +639,7 @@ const AutoTrackingPhase = ({
                     eHANT={currentEANL !== null ? parseFloat(currentEANL) : null}
                     aHANT={currentAANL !== null ? parseFloat(currentAANL) : null}
                     sd={currentSD !== null ? parseFloat(currentSD) : null}
+                    stabilitySD={currentStabilitySD !== null ? parseFloat(currentStabilitySD) : null}
                 />
             </div>
 

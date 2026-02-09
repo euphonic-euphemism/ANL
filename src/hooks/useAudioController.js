@@ -168,7 +168,11 @@ export const useAudioController = (speechUrl, noiseUrl, initialNoiseOffset = 0) 
       const targetDb = db <= -100 ? -200 : (db + offset);
       let gain = targetDb <= -100 ? 0 : Math.pow(10, targetDb / 20);
       if (gain > 1.0) gain = 1.0;
-      noiseGainNodeRef.current.gain.setTargetAtTime(gain, audioContextRef.current.currentTime, 0.1);
+
+      // Use a faster time constant (0.05s) for better responsiveness to 0.1s updates
+      noiseGainNodeRef.current.gain.setTargetAtTime(gain, audioContextRef.current.currentTime, 0.05);
+    } else {
+      console.warn("[Audio] setNoiseVolume called but noiseGainNodeRef is null");
     }
   }, []);
 

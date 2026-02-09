@@ -167,7 +167,7 @@ function App() {
     <div className="app-container">
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h1 className="app-title">Acceptable Noise Level Test <span className="version">v1.0.31</span></h1>
+          <h1 className="app-title">Acceptable Noise Level Test <span className="version">v1.0.32</span></h1>
           {patientName && (
             <div className="patient-badge" style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#64748b' }}>
               Patient: <strong style={{ color: '#fff' }}>{patientName}</strong>
@@ -300,6 +300,23 @@ function App() {
           <div className="card intro-card">
             <h2>Proceed to {labelB}</h2>
             <p>Do you need to re-calibrate audio for the new device?</p>
+
+            <div style={{ margin: '1.5rem 0', textAlign: 'left' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8' }}>Select Speech Passage for Test B</label>
+              <select
+                value={speechFile}
+                onChange={(e) => setSpeechFile(e.target.value)}
+                className="text-input"
+                style={{ width: '100%', padding: '0.8rem', borderRadius: '6px', border: '1px solid #475569', background: '#1e293b', color: 'white' }}
+              >
+                {speechOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="action-buttons" style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '2rem' }}>
               <button className="secondary-btn" onClick={startCalibration}>
                 Re-Calibrate
