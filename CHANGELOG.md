@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.33] - 2026-02-21
+### Changed
+- **Clinical TNT Protocols**: Aligned the tracking mechanism with published TNT clinical literature.
+  - Tracking speed starts at 1.0 dB/sec and dynamically drops to 0.5 dB/sec after 6 reversals.
+  - Test duration is now fixed at exactly 120 seconds, eliminating early auto-stopping.
+  - Average HANT (aHANT) calculation now explicitly averages valid peaks and valleys occurring *after* the 30-second mark.
+- **Results Display**: Removed the unvalidated `eHANT` metric from the Results screen to reduce clinical confusion and focus entirely on the validated `aHANT` and Excursion scores.
+
 ## [1.0.32] - 2026-02-09
 ### Fixed
 - **Tracking Stability Display**: Fixed an issue where "Tracking Stability" would stay on "Waiting..." indefinitely. It now correctly updates after 30 seconds of testing.

@@ -167,7 +167,7 @@ function App() {
     <div className="app-container">
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h1 className="app-title">Acceptable Noise Level Test <span className="version">v1.0.32</span></h1>
+          <h1 className="app-title">Acceptable Noise Level Test <span className="version">v1.0.33</span></h1>
           {patientName && (
             <div className="patient-badge" style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#64748b' }}>
               Patient: <strong style={{ color: '#fff' }}>{patientName}</strong>

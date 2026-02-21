@@ -161,10 +161,6 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
           {data.score && data.validity && (
             <>
               <div className="score-item" style={{ borderLeft: '1px solid #475569', paddingLeft: '1rem' }}>
-                <span className="label" title="Estimated HANT (Last Level)">eHANT</span>
-                <span className="value">{data.score.eANL} dB</span>
-              </div>
-              <div className="score-item">
                 <span className="label" title="Average HANT (Reversals)">aHANT</span>
                 <span className="value">{data.validity.aANL !== null && data.validity.aANL !== undefined ? Number(data.validity.aANL).toFixed(1) + ' dB' : 'N/A'}</span>
               </div>
@@ -297,7 +293,7 @@ const Results = ({ resultsA, resultsB, labelA, labelB, activeTestId, onStartTest
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
       <div ref={reportRef} style={{ padding: '2rem', background: '#0f172a', borderRadius: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #334155', paddingBottom: '1rem' }}>
-          <h2 style={{ margin: 0 }}>Hearing Aid Noise Tolerance Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.32</span></h2>
+          <h2 style={{ margin: 0 }}>Hearing Aid Noise Tolerance Test Report <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 'normal' }}>v1.0.33</span></h2>
           <div style={{ textAlign: 'right', fontSize: '0.9rem', color: '#94a3b8' }}>
             <div>Patient: <strong style={{ color: '#fff' }}>{patientName || "N/A"}</strong></div>
             <div>Date: {testDate || new Date().toLocaleDateString()}</div>

@@ -66,7 +66,7 @@ const ReliabilityDashboard = ({ history, speechLevel, eHANT, aHANT, sd, stabilit
                     <div className="metric-card">
                         <div className="metric-label">aHANT (Average)</div>
                         <div className="metric-value">{aHANT !== null && typeof aHANT === 'number' ? Number(aHANT).toFixed(1) : '--'} <span className="unit">dB</span></div>
-                        <div className="metric-desc">Running Avg (&gt;30s)</div>
+                        <div className="metric-desc">Avg Reversals (&gt;30s)</div>
                     </div>
 
                     {/* Excursion Height (Previously Excursion Consistency/SD) 

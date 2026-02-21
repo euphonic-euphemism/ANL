@@ -14,7 +14,7 @@ const AutoTrackingPhase = ({
     setNoiseVolume
 }) => {
     const [isPlaying, setIsPlaying] = useState(false);
-    const [noiseLevel, setNoiseLevel] = useState(speechLevel - 10); // Start 10dB below speech
+    const [noiseLevel, setNoiseLevel] = useState(speechLevel - 15); // Start 15dB below speech
     const [history, setHistory] = useState([]); // Array of {t, noise}
     const [startTime, setStartTime] = useState(null);
     const [reversalCount, setReversalCount] = useState(0); // Renamed from reversals
@@ -26,19 +26,16 @@ const AutoTrackingPhase = ({
     const REVERSAL_THRESHOLD = 6; // Keep for reference, but logic is now dynamic
 
     const stateRef = useRef({
-        noiseLevel: speechLevel - 10,
+        noiseLevel: speechLevel - 15,
         isSpaceHeld: false,
         isNoiseIncreasing: true, // Renamed from direction (derived boolean)
         reversalCount: 0, // Renamed from reversals
-        dbPerSecond: 2.0, // Initial fast rate
+        dbPerSecond: 1.0, // Initial rate based on literature
         reversalLevels: [], // Capture levels at reversal points
         lastReversalTime: 0, // Debounce: Timestamp of last valid reversal
         lastUpdate: 0,
         stats: { slope: 0, stdDev: 0, mean: 0 },
-        isFinishing: false,
-        // New: Track running average for aHANT (t > 30s)
-        sumNoiseAfter30: 0,
-        countNoiseAfter30: 0
+        isFinishing: false
     });
 
     // Calculate Average Excursion Width (Existing helper, keeping for now)
@@ -83,16 +80,16 @@ const AutoTrackingPhase = ({
         return reversals;
     };
 
-    // New Helper: Calculate Average HANT (Running Average > 30s)
+    // Helper: Calculate Average HANT (Avg of Peaks/Valleys > 30s)
     const calculateAverageHANT = (history, speechLvl) => {
-        const lateData = history.filter(pt => pt.t > 30);
-        if (lateData.length === 0) return { aBNL: null, aANL: null };
+        const reversalPoints = identifyReversalPoints(history, 30);
+        if (reversalPoints.length === 0) return { aBNL: null, aANL: null, count: 0 };
 
-        const sum = lateData.reduce((a, b) => a + b.noise, 0);
-        const aBNL = sum / lateData.length;
+        const sum = reversalPoints.reduce((a, b) => a + b.y, 0);
+        const aBNL = sum / reversalPoints.length;
         const aANL = aBNL - speechLvl;
 
-        return { aBNL, aANL, count: lateData.length };
+        return { aBNL, aANL, count: reversalPoints.length };
     };
 
     const [currentEANL, setCurrentEANL] = useState(null);
@@ -101,16 +98,13 @@ const AutoTrackingPhase = ({
     const [currentStabilitySD, setCurrentStabilitySD] = useState(null); // Used for Tracking Stability
 
     // Helper: Calculate Metrics from current state
-    const calculateLiveMetrics = (currentNoise, reversalLevels, speechLvl, sumNoiseAfter30, countNoiseAfter30) => {
+    const calculateLiveMetrics = (currentNoise, speechLvl, history) => {
         // eANL
         const eANL = currentNoise - speechLvl;
 
-        // aANL (Running Average after 30s)
-        let aANL = null;
-        if (countNoiseAfter30 > 0) {
-            const aBNL = sumNoiseAfter30 / countNoiseAfter30;
-            aANL = aBNL - speechLvl;
-        }
+        // aANL (Average of Reversals after 30s)
+        const metrics = calculateAverageHANT(history, speechLvl);
+        const aANL = metrics.aANL;
 
         return { eANL, aANL };
     };
@@ -157,40 +151,23 @@ const AutoTrackingPhase = ({
         // Using new identifyReversalPoints function
         const reversalPoints = identifyReversalPoints(history, 30);
 
-        const finalPoint = history.length > 0 ? history[history.length - 1] : { t: 0, noise: speechLevel - 10 };
+        const finalPoint = history.length > 0 ? history[history.length - 1] : { t: 0, noise: speechLevel - 15 };
         const durationSeconds = finalPoint ? parseFloat(finalPoint.t.toFixed(1)) : 0;
 
-        let eBNL;
-        if (reversalPoints.length > 0) {
-            // Calculate mean of the Y-values (Noise Levels) of the reversal points
-            const sum = reversalPoints.reduce((acc, pt) => acc + pt.y, 0);
-            eBNL = sum / reversalPoints.length;
-            console.log(`[AutoTracking] eHANT Calc: Found ${reversalPoints.length} peaks/valleys after 30s. Mean Noise: ${eBNL.toFixed(1)}`);
-        } else {
-            // Fallback: If no peaks/valleys after 30s (e.g. tracking too smooth or test too short),
-            // take average of all data points after 30s.
-            const lateData = history.filter(pt => pt.t > 30);
-            if (lateData.length > 0) {
-                const sum = lateData.reduce((a, b) => a + b.noise, 0);
-                eBNL = sum / lateData.length;
-                console.log(`[AutoTracking] eHANT Calc: No peaks found. Using average of trailing data (t>30s). Mean Noise: ${eBNL.toFixed(1)}`);
-            } else {
-                // Fallback 2: Test duration < 30s? Use final point.
-                eBNL = finalPoint.noise;
-                console.log(`[AutoTracking] eHANT Calc: Test < 30s. Using final point. Noise: ${eBNL.toFixed(1)}`);
-            }
-        }
+        // eBNL (Estimated BNL) is simply the final noise level reached
+        const eBNL = finalPoint.noise;
+        console.log(`[AutoTracking] eHANT Calc: Test finished at noise level: ${eBNL.toFixed(1)}`);
 
         // Apply Formula: eHANT = Noise - Speech
         const eANL = eBNL - speechLevel;
 
-        // --- Average HANT (New Logic: External Function) ---
+        // --- Average HANT (New Logic: External Function for Reversals) ---
         const { aBNL, aANL, count } = calculateAverageHANT(history, speechLevel);
 
         if (aANL !== null) {
-            console.log(`[AutoTracking] aHANT Calc: Mean of ${count} points (t>30s). Mean Noise: ${aBNL.toFixed(1)}`);
+            console.log(`[AutoTracking] aHANT Calc: Mean of ${count} reversals (t>30s). Mean Noise: ${aBNL.toFixed(1)}`);
         } else {
-            console.log("[AutoTracking] aHANT Calc: Insufficient data (>30s) for aHANT.");
+            console.log("[AutoTracking] aHANT Calc: Insufficient reversals (>30s) for aHANT.");
         }
 
         const reversals = [];
@@ -343,7 +320,7 @@ const AutoTrackingPhase = ({
                     score: { eANL: 0, eBNL: 0 },
                     validity: { reliability_status: "Error" },
                     mcl: speechLevel,
-                    bnl: speechLevel - 10,
+                    bnl: speechLevel - 15,
                     avgExcursion: 0,
                     reason: `Error: ${reason}`,
                     history: finalHistory
@@ -398,68 +375,8 @@ const AutoTrackingPhase = ({
             setNoiseVolume(noiseLevel - 95); // Set initial noise volume immediately
 
             const getCurrentTrackingRate = (reversalCount) => {
-                // Warm Start Logic: Removed 2.0 dB/s sprint since we start at Speech-10
-                if (reversalCount < 4) return 1.0;   // Standard learning speed
-                return 0.5;                          // Precision phase
-            };
-
-            const checkStoppingCriteria = (history, t, reversalCount) => {
-                // Guardrail 1: Time (Minimum 60 seconds)
-                if (t < 60) return false;
-
-                // Guardrail 2: Data Density (Minimum 7 reversals)
-                if (reversalCount < 7) return false;
-
-                // --- CI Calculation (New) ---
-                // 1. Get all captured reversal levels
-                const allReversals = stateRef.current.reversalLevels;
-
-                // 2. Drop the first 3 (stabilization)
-                const validReversals = allReversals.slice(3);
-
-                // 3. Need at least 4 valid points for stats
-                if (validReversals.length < 4) return false;
-
-                // 4. Calculate Stats (Mean, StdDev, SE, CI)
-                const n = validReversals.length;
-                const mean = validReversals.reduce((a, b) => a + b, 0) / n;
-                const variance = validReversals.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (n - 1); // Sample Variance
-                const stdDev = Math.sqrt(variance);
-                const standardError = stdDev / Math.sqrt(n);
-                const ci95 = 1.96 * standardError; // Margin of Error
-
-                // --- Existing Slope Logic (Still valuable for trend detection) ---
-                const windowData = history.filter(pt => pt.t >= t - 30);
-                let slope = 0;
-                let windowStdDev = 0;
-
-                if (windowData.length > 10) {
-                    const nW = windowData.length;
-                    const sumX = windowData.reduce((acc, pt) => acc + pt.t, 0);
-                    const sumY = windowData.reduce((acc, pt) => acc + pt.noise, 0);
-                    const sumXY = windowData.reduce((acc, pt) => acc + (pt.t * pt.noise), 0);
-                    const sumX2 = windowData.reduce((acc, pt) => acc + (pt.t * pt.t), 0);
-
-                    const numerator = (nW * sumXY) - (sumX * sumY);
-                    const denominator = (nW * sumX2) - (sumX * sumX);
-                    slope = denominator !== 0 ? numerator / denominator : 0;
-
-                    const windowMean = sumY / nW;
-                    const windowVariance = windowData.reduce((acc, pt) => acc + Math.pow(pt.noise - windowMean, 2), 0) / nW;
-                    windowStdDev = Math.sqrt(windowVariance);
-                }
-
-                stateRef.current.stats = { slope, stdDev: windowStdDev, mean, ci95 };
-
-                // Smart Stop Condition:
-                // 1. Confidence Interval is tight (<= 2.5 dB)
-                // 2. Slope is flat (<= 0.05) - ensures we aren't drifting
-                if (ci95 <= 2.5 && Math.abs(slope) <= 0.05) {
-                    // console.log(`Smart Stop Triggered! CI: ${ci95.toFixed(2)}, Slope: ${slope.toFixed(3)}`);
-                    return true;
-                }
-
-                return false;
+                // Based on literature: 1.0 dB/s initially, dropping to 0.5 dB/s after 6 reversals
+                return reversalCount < 6 ? 1.0 : 0.5;
             };
 
             const loop = () => {
@@ -517,57 +434,38 @@ const AutoTrackingPhase = ({
                     const reversalsAsObjects = stateRef.current.reversalLevels.map(val => ({ y: val }));
                     const liveAvgHeight = calculateAverageExcursionHeight(reversalsAsObjects);
 
+                    // For live metrics, we need the history including the current point
+                    const t = (now - startTime) / 1000;
+                    const newPoint = { t, noise: newNoise };
+                    if (!stateRef.current.historyForStability) stateRef.current.historyForStability = [];
+                    stateRef.current.historyForStability.push(newPoint);
+
                     const metrics = calculateLiveMetrics(
                         newNoise,
-                        stateRef.current.reversalLevels,
                         speechLevel,
-                        stateRef.current.sumNoiseAfter30,
-                        stateRef.current.countNoiseAfter30
+                        stateRef.current.historyForStability
                     );
                     setCurrentEANL(metrics.eANL.toFixed(1));
                     setCurrentAANL(metrics.aANL !== null ? metrics.aANL.toFixed(1) : null);
                     setCurrentSD(liveAvgHeight.toFixed(1)); // Passing Avg Height as 'sd' prop for now
 
-                    const t = (now - startTime) / 1000;
-
                     // Live Stability Calculation (Last 30s)
                     const liveStabilitySD = calculateStabilitySD(stateRef.current.historyForStability || [], t);
                     setCurrentStabilitySD(liveStabilitySD.toFixed(2));
 
-                    // Update Running Average for aHANT
-                    if (t > 30) {
-                        stateRef.current.sumNoiseAfter30 += newNoise;
-                        stateRef.current.countNoiseAfter30++;
-                    }
+                    // We use historyForStability to calculate aHANT now.
 
-                    // Maintain a parallel history in ref for synchronous access if needed, 
-                    // though for this specific calculation we might just need the previous frame's history + current point.
-                    // Let's attach the new point to the history we pass to setHistory.
-                    const newPoint = { t, noise: newNoise };
-                    // Optimization: We can store the full history in ref if performance allows, or just depend on setHistory callback.
-                    // But for live calculation in THIS frame, we need the history including this point.
-
-                    // Let's use a ref for history to avoid dependency on the async state update for the math
-                    if (!stateRef.current.historyForStability) stateRef.current.historyForStability = [];
-                    stateRef.current.historyForStability.push(newPoint);
+                    // We already added newPoint to stateRef.current.historyForStability above
 
                     setHistory(prev => {
                         const newHistory = [...prev, newPoint];
 
-                        if (t >= 120) { // Timeout at 2 min
+                        if (t >= 120) { // Fixed duration 120s per literature
                             // Force stop loop logic by checking if we are already finishing
                             if (!stateRef.current.isFinishing) {
-                                finishTest(newHistory, "Timeout (2 min)");
+                                finishTest(newHistory, "Test Complete (120s)");
                             }
                             // Return history but loop should stop via isPlaying effect
-                            return newHistory;
-                        }
-
-                        // Check Stopping Criteria
-                        if (checkStoppingCriteria(newHistory, t, stateRef.current.reversalCount)) {
-                            if (!stateRef.current.isFinishing) {
-                                finishTest(newHistory, "Stable Criteria Met");
-                            }
                             return newHistory;
                         }
 
@@ -592,21 +490,18 @@ const AutoTrackingPhase = ({
         // Fix: Call play() directly here to ensure AudioContext resumes within a user gesture
         play();
 
-        const startLevel = speechLevel - 10;
+        const startLevel = speechLevel - 15;
         stateRef.current = {
             noiseLevel: startLevel,
             isSpaceHeld: false,
             isNoiseIncreasing: true,
             reversalCount: 0,
-            dbPerSecond: 1.0, // Initial Rate for Warm Start
+            dbPerSecond: 1.0, // Initial Rate
             reversalLevels: [],
             lastReversalTime: 0,
             lastUpdate: Date.now(),
             stats: { slope: 0, stdDev: 0, mean: 0 },
             isFinishing: false,
-            sumNoiseAfter30: 0,
-            sumNoiseAfter30: 0,
-            countNoiseAfter30: 0,
             historyForStability: [{ t: 0, noise: startLevel }]
         };
         setNoiseLevel(startLevel);
@@ -642,9 +537,7 @@ const AutoTrackingPhase = ({
                     stabilitySD={currentStabilitySD !== null ? parseFloat(currentStabilitySD) : null}
                 />
             </div>
-
             {/* Render Graph only if not in dashboard (redundant here as dashboard has it, removed standalone graph) */}
-
             {isPlaying ? (
                 <div className="controls-active">
                     <div className={`instruction-panel ${isSpaceHeld ? 'active' : ''}`}>
